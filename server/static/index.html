@@ -1,0 +1,746 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>geoagent operator</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<style>
+:root {
+  --bg: #0d1117; --panel: #151b23; --panel2: #1c232d; --line: #2b3440; --text: #dbe2ea; --dim: #8492a3;
+  --accent: #58a6ff; --ok: #3fb950; --warn: #d29922; --bad: #f85149; --gold: #f2c744; --human: #e3b341;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+button { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; padding: 4px 10px; cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.danger { border-color: #6e2b28; color: #ffb4ae; }
+button.penalty { border-color: #7a5c12; color: var(--human); }
+select, textarea { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 4px 6px; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+header { position: sticky; top: 0; z-index: 1000; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+  padding: 8px 16px; background: #0a0e13; border-bottom: 1px solid var(--line); }
+header h1 { font-size: 14px; margin: 0; font-weight: 600; }
+header .grow { flex: 1; }
+.badge { display: inline-block; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); font-size: 11px; font-weight: 600; letter-spacing: .03em; white-space: nowrap; }
+.badge.urban { color: #79c0ff; border-color: #1f4a7a; }
+.badge.nonurban { color: #7ee2a8; border-color: #1f5c3a; }
+.badge.special { color: #1a1300; background: var(--gold); border-color: var(--gold); }
+.badge.mode-auto { color: var(--dim); }
+.badge.mode-human { color: var(--human); border-color: #7a5c12; }
+.badge.st-running { color: var(--accent); border-color: #1f4a7a; }
+.badge.st-awaiting_mcq { color: #1a1300; background: var(--human); border-color: var(--human); }
+.badge.st-done { color: var(--ok); border-color: #1f5c3a; }
+.badge.st-failed { color: var(--bad); border-color: #6e2b28; }
+.badge.st-pending { color: var(--dim); }
+#conn { width: 9px; height: 9px; border-radius: 50%; background: var(--bad); display: inline-block; }
+#conn.up { background: var(--ok); }
+#mcq-alert { color: #1a1300; background: var(--human); border-radius: 5px; padding: 2px 9px; font-weight: 700; }
+#mcq-alert[hidden] { display: none; }
+
+#grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 660px), 1fr)); gap: 12px; padding: 12px 16px 80px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; min-width: 0; }
+.tile.special { border: 2px solid var(--gold); grid-column: 1 / -1; }
+.tile.asking { box-shadow: 0 0 0 2px var(--human); }
+.special-flag { display: none; background: var(--gold); color: #1a1300; font-weight: 800; letter-spacing: .08em; padding: 3px 12px; font-size: 12px; }
+.tile.special .special-flag { display: block; }
+
+.head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.head .pid { font-weight: 700; font-size: 14px; overflow-wrap: anywhere; }
+.head .meta { color: var(--dim); font-size: 12px; }
+.head .grow { flex: 1; }
+.mult { font-family: var(--mono); font-size: 20px; font-weight: 700; color: var(--ok); line-height: 1; }
+.mult.cut { color: var(--warn); }
+.mult.deep { color: var(--bad); }
+.mult-detail { color: var(--dim); font-size: 11px; }
+
+.timebar { padding: 6px 12px 8px; border-bottom: 1px solid var(--line); }
+.timebar .row { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--dim); }
+.timebar .row b { color: var(--text); font-weight: 600; }
+.bar { position: relative; height: 6px; margin-top: 5px; background: var(--panel2); border-radius: 3px; }
+.bar .fill { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 3px; background: var(--ok); }
+.bar .fill.soft { background: var(--warn); }
+.bar .fill.hard { background: var(--bad); }
+.bar .tick { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--text); opacity: .7; }
+
+.pano { position: relative; height: 190px; background-color: #000; background-repeat: repeat-x; cursor: grab; touch-action: none; user-select: none; }
+.tile.special .pano { height: 260px; }
+.pano.dragging { cursor: grabbing; }
+.pano-tools { position: absolute; right: 6px; bottom: 6px; display: flex; gap: 4px; }
+.pano-tools button { padding: 1px 8px; background: rgba(13,17,23,.8); }
+
+.mcq { display: none; padding: 10px 12px; background: #2a2209; border-bottom: 1px solid #7a5c12; }
+.tile.asking .mcq { display: block; }
+.mcq .q { font-size: 15px; font-weight: 600; margin-bottom: 4px; overflow-wrap: anywhere; }
+.mcq .why { color: #d8c48a; font-size: 12px; margin-bottom: 8px; overflow-wrap: anywhere; }
+.mcq .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 6px; }
+.mcq .opts button { text-align: left; padding: 8px 10px; border-color: #7a5c12; background: #3a2f0d; white-space: normal; overflow-wrap: anywhere; }
+.mcq .count { float: right; font-family: var(--mono); font-size: 16px; font-weight: 700; color: var(--human); }
+
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0; }
+@media (max-width: 720px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+.col { min-width: 0; padding: 8px 12px; }
+.col + .col { border-left: 1px solid var(--line); }
+h3 { margin: 8px 0 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); }
+h3:first-child { margin-top: 0; }
+h3 .final { color: var(--ok); }
+.map { height: 250px; border-radius: 5px; background: var(--panel2); }
+.map.armed { outline: 2px solid var(--bad); cursor: crosshair; }
+.leaflet-container { font: inherit; background: #10151b; }
+.leaflet-tooltip.ptip { background: rgba(13,17,23,.85); color: var(--text); border: 0; box-shadow: none; padding: 0 4px; font-family: var(--mono); font-size: 11px; }
+.leaflet-tooltip.ptip::before { display: none; }
+
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+td { padding: 2px 6px 2px 0; vertical-align: top; border-top: 1px solid var(--line); }
+tr:first-child td { border-top: 0; }
+td.r { text-align: right; white-space: nowrap; }
+td.lbl { overflow-wrap: anywhere; }
+td.dim, .dim { color: var(--dim); }
+.empty { color: var(--dim); font-style: italic; font-size: 12px; }
+
+.stream { height: 330px; overflow-y: auto; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); padding: 4px 8px; font-size: 12px; }
+.tile.special .stream { height: 420px; }
+.ev { padding: 3px 0; border-top: 1px solid #1a212b; }
+.ev:first-child { border-top: 0; }
+.ev .when { color: var(--dim); font-family: var(--mono); font-size: 11px; margin-right: 6px; }
+.ev .type { color: var(--dim); font-size: 11px; }
+.ln { white-space: pre-wrap; overflow-wrap: anywhere; }
+.ln.thinking { color: #a5b4c8; font-style: italic; }
+.ln.thinking.clamp, .ln.text.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 8; overflow: hidden; cursor: pointer; }
+.ln.tool { color: #79c0ff; font-family: var(--mono); font-size: 11px; }
+.ln.result { color: #7d8a9a; font-family: var(--mono); font-size: 11px; }
+.ln.error { color: var(--bad); font-family: var(--mono); font-size: 11px; }
+.ln.human { color: var(--human); font-weight: 600; }
+.ln.harness { color: #7ee2a8; }
+.thumbs { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
+.thumbs img { height: 64px; border-radius: 3px; border: 1px solid var(--line); cursor: zoom-in; }
+
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); background: var(--panel2); }
+.controls .grow { flex: 1; }
+.controls label { display: inline-flex; align-items: center; gap: 5px; color: var(--dim); }
+.drawer { display: none; padding: 10px 12px; border-top: 1px solid var(--line); background: #1a1508; }
+.drawer.open { display: block; }
+.drawer textarea { width: 100%; min-height: 84px; resize: vertical; }
+.drawer .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.drawer .rule { color: #d8c48a; font-size: 12px; margin-bottom: 6px; }
+.problems { color: var(--bad); font-size: 12px; margin: 6px 0 0; padding-left: 18px; }
+.problems:empty { display: none; }
+
+dialog { background: var(--panel); color: var(--text); border: 1px solid var(--human); border-radius: 8px; padding: 16px 18px; max-width: min(92vw, 520px); }
+dialog::backdrop { background: rgba(0,0,0,.65); }
+dialog h2 { margin: 0 0 8px; font-size: 15px; }
+dialog .body { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 40vh; overflow: auto; color: #c3ccd6; font-size: 12px; }
+dialog .change { margin: 12px 0; font-family: var(--mono); font-size: 22px; font-weight: 700; }
+dialog .change .to { color: var(--bad); }
+dialog .actions { display: flex; justify-content: flex-end; gap: 8px; }
+#toasts { position: fixed; right: 16px; bottom: 16px; z-index: 3000; display: flex; flex-direction: column; gap: 6px; max-width: min(92vw, 460px); }
+.toast { white-space: pre-wrap; background: #3a1513; border: 1px solid #6e2b28; color: #ffd7d3; border-radius: 6px; padding: 8px 12px; overflow-wrap: anywhere; }
+.toast.info { background: #12261a; border-color: #1f5c3a; color: #c9f2d6; }
+</style>
+</head>
+<body>
+<header>
+  <h1>geoagent operator</h1>
+  <span id="conn" title="event stream"></span>
+  <span class="meta dim" id="run-id"></span>
+  <span class="badge" id="mode"></span>
+  <span class="num" id="run-clock"></span>
+  <span class="dim" id="progress"></span>
+  <span id="mcq-alert" hidden></span>
+  <span class="grow"></span>
+  <button id="finalize-all" class="danger">Finalize all</button>
+  <button id="export">Export JSON</button>
+</header>
+<main id="grid"></main>
+<div id="toasts"></div>
+<dialog id="confirm">
+  <h2></h2>
+  <div class="body"></div>
+  <div class="change"><span class="from"></span> &rarr; <span class="to"></span></div>
+  <div class="actions"><button value="cancel" class="cancel">Cancel</button><button value="ok" class="ok penalty"></button></div>
+</dialog>
+
+<script>
+"use strict";
+// Every string that originates from the model, the operator or the log is inserted with
+// textContent / DOM nodes. innerHTML is never used with dynamic content.
+
+const grid = document.getElementById("grid");
+const tiles = new Map();
+let run = { panoramas: [] };
+
+function el(tag, cls, text) {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text !== undefined && text !== null) node.textContent = String(text);
+  return node;
+}
+const fmtMult = (m) => "x" + Number(m ?? 1).toFixed(3).replace(/0+$/, "").replace(/\.$/, ".0");
+const fmtCoord = (v) => Number(v).toFixed(6);
+function fmtClock(s) {
+  s = Math.max(0, Math.floor(s || 0));
+  return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+}
+const panoUrl = (id, rest) => "/api/pano/" + encodeURIComponent(id) + rest;
+
+function toast(message, info) {
+  const node = el("div", "toast" + (info ? " info" : ""), message);
+  document.getElementById("toasts").append(node);
+  setTimeout(() => node.remove(), info ? 5000 : 9000);
+}
+
+async function api(method, url, body) {
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: body === undefined ? {} : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    let data = null;
+    try { data = await res.json(); } catch (_) { /* empty body */ }
+    return { ok: res.ok, status: res.status, data };
+  } catch (err) {
+    return { ok: false, status: 0, data: { detail: "network error: " + err.message } };
+  }
+}
+function errorText(res) {
+  const detail = res.data && res.data.detail;
+  if (!detail) return "request failed (" + res.status + ")";
+  if (typeof detail === "string") return detail;
+  if (detail.message) return detail.message;
+  return JSON.stringify(detail);
+}
+
+function confirmDialog({ title, body, before, after, okLabel }) {
+  const dlg = document.getElementById("confirm");
+  dlg.querySelector("h2").textContent = title;
+  dlg.querySelector(".body").textContent = body;
+  dlg.querySelector(".from").textContent = fmtMult(before);
+  dlg.querySelector(".to").textContent = fmtMult(after);
+  dlg.querySelector(".ok").textContent = okLabel;
+  return new Promise((resolve) => {
+    const done = (value) => { dlg.close(); resolve(value); };
+    dlg.querySelector(".ok").onclick = () => done(true);
+    dlg.querySelector(".cancel").onclick = () => done(false);
+    dlg.oncancel = () => resolve(false);
+    dlg.showModal();
+    dlg.querySelector(".cancel").focus();
+  });
+}
+
+// ---------------------------------------------------------------- tile construction
+
+function createTile(p) {
+  const id = p.panorama_id;
+  const t = { id, state: p, lastSeq: 0, seen: new Set(), mcqId: null, mcqDeadline: 0, clockAt: performance.now(),
+              hypSig: "", layers: null, geo: { armed: false, latlng: null, marker: null }, pano: { x: 0, y: 50, zoom: 260 } };
+  const root = t.root = el("section", "tile");
+  root.append(el("div", "special-flag", "SPECIAL ONE  ·  SCORE x3  ·  PRIORITY"));
+
+  const head = el("div", "head");
+  t.pid = el("span", "pid", id);
+  t.label = el("span", "badge");
+  t.status = el("span", "badge");
+  t.meta = el("span", "meta");
+  const multBox = el("div");
+  multBox.style.textAlign = "right";
+  t.mult = el("div", "mult");
+  t.multDetail = el("div", "mult-detail");
+  multBox.append(t.mult, t.multDetail);
+  head.append(t.pid, t.label, t.status, t.meta, el("span", "grow"), multBox);
+
+  const timebar = el("div", "timebar");
+  const row = el("div", "row");
+  t.time = el("span");
+  t.spend = el("span");
+  row.append(t.time, t.spend);
+  const bar = el("div", "bar");
+  t.fill = el("div", "fill");
+  t.softTick = el("div", "tick");
+  bar.append(t.fill, t.softTick);
+  timebar.append(row, bar);
+
+  root.append(head, timebar, buildPano(t), buildMcq(t));
+
+  const cols = el("div", "cols");
+  const left = el("div", "col");
+  const right = el("div", "col");
+  t.mapEl = el("div", "map");
+  t.hypTable = el("table");
+  left.append(el("h3", "", "Hypotheses"), t.mapEl, t.hypTable);
+  t.listTitle = el("h3");
+  t.entryTable = el("table");
+  t.stream = el("div", "stream");
+  right.append(t.listTitle, t.entryTable, el("h3", "", "Agent reasoning"), t.stream);
+  cols.append(left, right);
+  root.append(cols, buildControls(t));
+
+  grid.append(root);
+  buildMap(t);
+  tiles.set(id, t);
+  return t;
+}
+
+function buildPano(t) {
+  const box = t.panoEl = el("div", "pano");
+  box.style.backgroundImage = "url(" + JSON.stringify(panoUrl(t.id, "/image?w=4096")) + ")";
+  const apply = () => {
+    box.style.backgroundSize = "auto " + t.pano.zoom + "%";
+    box.style.backgroundPosition = t.pano.x + "px " + t.pano.y + "%";
+  };
+  let drag = null;
+  box.addEventListener("pointerdown", (e) => {
+    if (e.target !== box) return;
+    drag = { x: e.clientX, y: e.clientY, px: t.pano.x, py: t.pano.y };
+    box.setPointerCapture(e.pointerId);
+    box.classList.add("dragging");
+  });
+  box.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    t.pano.x = drag.px + (e.clientX - drag.x);
+    const overflow = box.clientHeight * (t.pano.zoom / 100 - 1);
+    const dy = overflow > 0 ? ((e.clientY - drag.y) / overflow) * 100 : 0;
+    t.pano.y = Math.min(100, Math.max(0, drag.py - dy));
+    apply();
+  });
+  const end = () => { drag = null; box.classList.remove("dragging"); };
+  box.addEventListener("pointerup", end);
+  box.addEventListener("pointercancel", end);
+  const tools = el("div", "pano-tools");
+  const zoom = (factor) => { t.pano.zoom = Math.min(1200, Math.max(100, t.pano.zoom * factor)); apply(); };
+  const minus = el("button", "", "−"); minus.title = "zoom out"; minus.onclick = () => zoom(1 / 1.4);
+  const plus = el("button", "", "+"); plus.title = "zoom in"; plus.onclick = () => zoom(1.4);
+  const open = el("button", "", "open"); open.title = "open the panorama in a new tab";
+  open.onclick = () => window.open(panoUrl(t.id, "/image?w=4096"), "_blank", "noopener");
+  tools.append(minus, plus, open);
+  box.append(tools);
+  apply();
+  return box;
+}
+
+// MCQ: rendered only from the agent's pending question; buttons only, no text input (R7).
+function buildMcq(t) {
+  const box = el("div", "mcq");
+  t.mcqCount = el("span", "count");
+  t.mcqQ = el("div", "q");
+  t.mcqWhy = el("div", "why");
+  t.mcqOpts = el("div", "opts");
+  box.append(t.mcqCount, t.mcqQ, t.mcqWhy, t.mcqOpts);
+  return box;
+}
+
+function renderMcq(t, p) {
+  const mcq = p.pending_mcq;
+  t.root.classList.toggle("asking", !!mcq);
+  if (!mcq) { t.mcqId = null; t.mcqOpts.replaceChildren(); return; }
+  t.mcqDeadline = performance.now() + mcq.remaining_s * 1000;
+  if (t.mcqId === mcq.id) return;
+  t.mcqId = mcq.id;
+  t.mcqQ.textContent = mcq.question;
+  t.mcqWhy.textContent = mcq.why_it_matters ? "Why it matters: " + mcq.why_it_matters : "";
+  t.mcqOpts.replaceChildren(...mcq.options.map((option, index) => {
+    const btn = el("button", "", String.fromCharCode(65 + index) + ".  " + option);
+    btn.onclick = async () => {
+      t.mcqOpts.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+      const res = await api("POST", panoUrl(t.id, "/mcq/" + encodeURIComponent(mcq.id) + "/answer"), { index });
+      if (res.ok) updateTile(res.data.state);
+      else { toast(t.id + ": " + errorText(res)); t.mcqOpts.querySelectorAll("button").forEach((b) => { b.disabled = false; }); }
+    };
+    return btn;
+  }));
+}
+
+function buildControls(t) {
+  const frag = document.createDocumentFragment();
+  const bar = el("div", "controls");
+  frag.append(bar);
+  const finalize = el("button", "danger", "Finalize now");
+  finalize.onclick = async () => {
+    if (!window.confirm("Finalize " + t.id + " with the current best list?")) return;
+    const res = await api("POST", panoUrl(t.id, "/finalize"));
+    if (res.ok) updateTile(res.data.state); else toast(t.id + ": " + errorText(res));
+  };
+  t.finalizeBtn = finalize;
+  if (!t.state.human_enabled) {
+    // --no-human: none of the three human controls is rendered.
+    bar.append(el("span", "dim", "Autonomous mode: human channels disabled"), el("span", "grow"), finalize);
+    return frag;
+  }
+
+  const allowLabel = el("label");
+  t.mcqAllowed = el("input");
+  t.mcqAllowed.type = "checkbox";
+  t.mcqAllowed.onchange = async () => {
+    const res = await api("POST", panoUrl(t.id, "/mcq_allowed"), { allowed: t.mcqAllowed.checked });
+    if (res.ok) updateTile(res.data.state); else toast(t.id + ": " + errorText(res));
+  };
+  t.mcqAllowedText = el("span");
+  allowLabel.append(t.mcqAllowed, t.mcqAllowedText);
+
+  const cueToggle = el("button", "penalty", "Cue…");
+  t.geoToggle = el("button", "penalty", "Last-resort geocode…");
+  bar.append(allowLabel, el("span", "grow"), cueToggle, t.geoToggle, finalize);
+
+  // Cue box (R6): hidden until toggled.
+  const cue = el("div", "drawer");
+  cue.append(el("div", "rule",
+    "A cue costs x0.8. Describe visual features only: no place, street, landmark, country, region, road or language names, no coordinates. The lint is a backstop, not a guarantee: you answer for rule R6. A cue only reaches the agent while this panorama is still running, and not in its last 30 s."));
+  t.cueText = el("textarea");
+  t.cueText.maxLength = run.cue_max_chars || 1000;
+  t.cueText.placeholder = "Visual-feature description only";
+  t.cueCount = el("span", "dim num");
+  t.cueSend = el("button", "penalty", "Send cue (x0.8)");
+  t.cueProblems = el("ul", "problems");
+  const cueRow = el("div", "row");
+  cueRow.append(t.cueSend, t.cueCount);
+  cue.append(t.cueText, cueRow, t.cueProblems);
+  const countChars = () => { t.cueCount.textContent = t.cueText.value.length + " / " + t.cueText.maxLength; };
+  t.cueText.addEventListener("input", () => { countChars(); t.cueProblems.replaceChildren(); });
+  countChars();
+  cueToggle.onclick = () => cue.classList.toggle("open");
+  t.cueSend.onclick = () => sendCue(t);
+
+  // Last-resort geocode (R8): only for a place the agent itself named.
+  const geo = t.geoBox = el("div", "drawer");
+  geo.append(el("div", "rule",
+    "A human geocode costs x0.5, replaces the answer with your point and ends this panorama at once (no further questions or cues). Pick the place the agent named, then click its map."));
+  t.geoPlace = el("select");
+  t.geoPoint = el("span", "num dim", "no point picked");
+  t.geoSend = el("button", "penalty", "Submit geocode (x0.5)");
+  t.geoSend.disabled = true;
+  const geoRow = el("div", "row");
+  geoRow.append(t.geoPlace, t.geoPoint, t.geoSend);
+  geo.append(geoRow);
+  t.geoToggle.onclick = () => armGeocode(t, !t.geo.armed);
+  t.geoSend.onclick = () => sendGeocode(t);
+
+  frag.append(cue, geo);
+  return frag;
+}
+
+async function sendCue(t) {
+  const text = t.cueText.value;
+  t.cueSend.disabled = true;
+  try {
+    const lint = await api("POST", panoUrl(t.id, "/cue/lint"), { text });
+    if (!lint.ok) { toast(t.id + ": " + errorText(lint)); return; }
+    if (!lint.data.ok) {
+      t.cueProblems.replaceChildren(...lint.data.problems.map((problem) => el("li", "", problem)));
+      return;
+    }
+    const yes = await confirmDialog({
+      title: "Send cue to " + t.id + "?",
+      body: text,
+      before: lint.data.multiplier_before,
+      after: lint.data.multiplier_after,
+      okLabel: "Send cue (x0.8)",
+    });
+    if (!yes) return;
+    const res = await api("POST", panoUrl(t.id, "/cue"), { text, confirmed: true });
+    if (!res.ok) {
+      const lintDetail = res.data && res.data.detail && res.data.detail.lint;
+      const problems = (lintDetail && lintDetail.problems) || [errorText(res)];
+      t.cueProblems.replaceChildren(...problems.map((problem) => el("li", "", problem)));
+      return;
+    }
+    t.cueText.value = "";
+    t.cueText.dispatchEvent(new Event("input"));
+    updateTile(res.data.state);
+    toast(t.id + ": cue sent", true);
+  } finally {
+    t.cueSend.disabled = false;
+  }
+}
+
+function armGeocode(t, armed) {
+  t.geo.armed = armed;
+  t.geoBox.classList.toggle("open", armed);
+  t.mapEl.classList.toggle("armed", armed);
+  if (!armed && t.geo.marker) { t.geo.marker.remove(); t.geo.marker = null; t.geo.latlng = null; }
+  if (!armed) { t.geoPoint.textContent = "no point picked"; t.geoSend.disabled = true; }
+}
+
+async function sendGeocode(t) {
+  const point = t.geo.latlng;
+  const place = t.geoPlace.value;
+  if (!point || !place) return;
+  const yes = await confirmDialog({
+    title: "Override " + t.id + " with a human geocode?",
+    body: "Place named by the agent: " + place + "\nYour point: " + fmtCoord(point.lat) + ", " + fmtCoord(point.lng)
+      + "\n\nAll 10 entries become this point.",
+    before: t.state.penalty.multiplier,
+    after: t.state.multiplier_after.geocode,
+    okLabel: "Submit geocode (x0.5)",
+  });
+  if (!yes) return;
+  const res = await api("POST", panoUrl(t.id, "/geocode"),
+    { lat: point.lat, lng: point.lng, place_label: place, confirmed: true });
+  if (!res.ok) { toast(t.id + ": " + errorText(res)); return; }
+  armGeocode(t, false);
+  updateTile(res.data.state);
+  toast(t.id + ": human geocode applied", true);
+}
+
+// ---------------------------------------------------------------- map
+
+function buildMap(t) {
+  if (!window.L) { t.mapEl.textContent = "Map library unavailable (offline)."; return; }
+  t.map = L.map(t.mapEl, { zoomControl: true, attributionControl: true }).setView([42.5, -3.5], 4);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, attribution: "© OpenStreetMap contributors",
+  }).addTo(t.map);
+  t.layers = L.layerGroup().addTo(t.map);
+  t.map.on("click", (e) => {
+    if (!t.geo.armed) return;
+    const lng = ((e.latlng.lng + 540) % 360) - 180;
+    t.geo.latlng = { lat: e.latlng.lat, lng };
+    if (t.geo.marker) t.geo.marker.setLatLng(e.latlng);
+    else t.geo.marker = L.circleMarker(e.latlng, { radius: 8, color: "#f85149", weight: 3, fillOpacity: .3 }).addTo(t.map);
+    t.geoPoint.textContent = fmtCoord(e.latlng.lat) + ", " + fmtCoord(lng);
+    t.geoSend.disabled = !t.geoPlace.value;
+  });
+}
+
+function renderMap(t, p) {
+  if (!t.map) return;
+  const answer = (p.final || p.provisional || [])[0];
+  const sig = JSON.stringify([p.hypotheses.map((h) => [h.lat, h.lng, h.probability, h.radius_m]), answer && [answer.lat, answer.lng]]);
+  if (sig === t.hypSig) return;
+  t.hypSig = sig;
+  t.layers.clearLayers();
+  const points = [];
+  for (const h of p.hypotheses) {
+    const at = [h.lat, h.lng];
+    points.push(at);
+    if (h.radius_m > 0) L.circle(at, { radius: h.radius_m, color: "#58a6ff", weight: 1, fillOpacity: .08 }).addTo(t.layers);
+    const marker = L.circleMarker(at, { radius: 5 + 9 * Math.sqrt(h.probability || 0), color: "#58a6ff", weight: 2, fillOpacity: .45 });
+    marker.bindTooltip(el("span", "", Math.round((h.probability || 0) * 100) + "%"),
+      { permanent: true, direction: "right", className: "ptip", offset: [8, 0] });
+    const popup = el("div", "", (h.label || "(unnamed)") + (h.evidence ? "\n" + h.evidence : ""));
+    popup.style.whiteSpace = "pre-wrap";
+    marker.bindPopup(popup);
+    marker.addTo(t.layers);
+  }
+  if (answer) {
+    points.push([answer.lat, answer.lng]);
+    L.circleMarker([answer.lat, answer.lng], { radius: 4, color: "#fff", weight: 2, fillColor: p.final ? "#3fb950" : "#d29922", fillOpacity: 1 })
+      .bindTooltip(el("span", "", p.final ? "final #1" : "provisional #1"), { className: "ptip" }).addTo(t.layers);
+  }
+  if (points.length && !t.geo.armed) t.map.fitBounds(L.latLngBounds(points).pad(0.3), { maxZoom: 16, animate: false });
+}
+
+// ---------------------------------------------------------------- tile update
+
+function renderHypotheses(t, p) {
+  const rows = [...p.hypotheses].sort((a, b) => b.probability - a.probability).map((h) => {
+    const tr = el("tr");
+    tr.title = h.evidence || "";
+    tr.append(
+      el("td", "r num", Math.round(h.probability * 100) + "%"),
+      el("td", "lbl", h.label || "(unnamed)"),
+      el("td", "r num dim", h.radius_m ? "±" + (h.radius_m >= 1000 ? (h.radius_m / 1000).toFixed(1) + " km" : Math.round(h.radius_m) + " m") : ""),
+      el("td", "r num dim", fmtCoord(h.lat) + ", " + fmtCoord(h.lng)));
+    return tr;
+  });
+  if (!rows.length) { const tr = el("tr"); tr.append(el("td", "empty", "No hypotheses yet.")); rows.push(tr); }
+  t.hypTable.replaceChildren(...rows);
+}
+
+// Consecutive identical slots collapse into one row ("1-10"); the list is 10 x the same point by default.
+function renderEntries(t, p) {
+  const entries = p.final || p.provisional || [];
+  t.listTitle.replaceChildren(p.final ? el("span", "final", "Final list (10 entries)") : document.createTextNode("Provisional list"));
+  const groups = [];
+  for (const e of entries) {
+    const last = groups[groups.length - 1];
+    if (last && last.lat === e.lat && last.lng === e.lng && last.multiplier === e.multiplier && last.origin === e.origin) last.to = e.rank;
+    else groups.push({ from: e.rank, to: e.rank, lat: e.lat, lng: e.lng, multiplier: e.multiplier, origin: e.origin });
+  }
+  const rows = groups.map((g) => {
+    const tr = el("tr");
+    tr.append(
+      el("td", "num dim", g.from === g.to ? "#" + g.from : "#" + g.from + "–" + g.to),
+      el("td", "num", fmtCoord(g.lat) + ", " + fmtCoord(g.lng)),
+      el("td", "r num", fmtMult(g.multiplier)),
+      el("td", "r dim", g.origin));
+    return tr;
+  });
+  if (!rows.length) { const tr = el("tr"); tr.append(el("td", "empty", "No list yet.")); rows.push(tr); }
+  t.entryTable.replaceChildren(...rows);
+}
+
+function renderControls(t, p) {
+  t.finalizeBtn.disabled = !!p.final;
+  if (!p.human_enabled || !t.mcqAllowed) return;
+  t.mcqAllowed.checked = p.mcq_allowed;
+  t.mcqAllowedText.textContent = "MCQ allowed (" + p.mcqs_left + " left, x0.95 each)";
+  const done = !!p.final;
+  t.cueSend.disabled = done;
+  t.geoToggle.disabled = !p.geocode_enabled;
+  t.geoToggle.title = p.geocode_enabled ? "x0.5: human picks the coordinate of a place the agent named"
+    : "Enabled only once the agent has named a place";
+  const places = p.named_places || [];
+  if (JSON.stringify(places) !== t.placesSig) {
+    t.placesSig = JSON.stringify(places);
+    const chosen = t.geoPlace.value;
+    t.geoPlace.replaceChildren(...places.map((name) => { const o = el("option", "", name); o.value = name; return o; }));
+    if (places.includes(chosen)) t.geoPlace.value = chosen;
+  }
+  if (!p.geocode_enabled && t.geo.armed) armGeocode(t, false);
+}
+
+function updateTile(p) {
+  if (!p) return;
+  const t = tiles.get(p.panorama_id) || createTile(p);
+  t.state = p;
+  t.clockAt = performance.now();
+  t.root.classList.toggle("special", !!p.special);
+  t.label.textContent = p.label;
+  t.label.className = "badge " + (p.label === "Urban" ? "urban" : "nonurban");
+  t.status.textContent = p.status.replace("_", " ").toUpperCase();
+  t.status.className = "badge st-" + p.status;
+  t.meta.textContent = [p.filename, p.timestamp ? "captured " + p.timestamp : null].filter(Boolean).join("  ·  ");
+  const pen = p.penalty;
+  t.mult.textContent = fmtMult(pen.multiplier);
+  t.mult.className = "mult" + (pen.multiplier < 0.6 ? " deep" : pen.multiplier < 1 ? " cut" : "");
+  t.multDetail.textContent = pen.cues + " cue · " + pen.mcqs + " mcq · " + pen.human_geocodes + " geocode"
+    + (p.special ? " · score x3" : "");
+  t.spend.replaceChildren(
+    document.createTextNode("spend "), el("b", "num", "$" + Number(p.spend_usd || 0).toFixed(2)),
+    document.createTextNode(" / $" + p.budget.max_spend_usd + "  ·  turn "), el("b", "num", p.turns),
+    document.createTextNode(" / " + p.budget.max_turns));
+  t.softTick.style.left = (100 * p.budget.soft_deadline_s / p.budget.hard_deadline_s) + "%";
+  renderMcq(t, p);
+  renderHypotheses(t, p);
+  renderEntries(t, p);
+  renderMap(t, p);
+  renderControls(t, p);
+  tickTile(t);
+}
+
+function tickTile(t) {
+  const p = t.state;
+  const elapsed = p.elapsed_s + (p.active ? (performance.now() - t.clockAt) / 1000 : 0);
+  const { soft_deadline_s: soft, hard_deadline_s: hard } = p.budget;
+  t.time.replaceChildren(
+    document.createTextNode("time "), el("b", "num", fmtClock(elapsed)),
+    document.createTextNode("  ·  soft " + fmtClock(soft) + "  ·  hard " + fmtClock(hard)));
+  t.fill.style.width = Math.min(100, 100 * elapsed / hard) + "%";
+  t.fill.className = "fill" + (elapsed >= hard ? " hard" : elapsed >= soft ? " soft" : "");
+  if (p.pending_mcq) t.mcqCount.textContent = Math.max(0, Math.ceil((t.mcqDeadline - performance.now()) / 1000)) + " s";
+  return elapsed;
+}
+
+// ---------------------------------------------------------------- reasoning stream
+
+function appendEvent(id, ev) {
+  const t = tiles.get(id);
+  if (!t || !ev || t.seen.has(ev.seq)) return;
+  t.seen.add(ev.seq);
+  t.lastSeq = Math.max(t.lastSeq, ev.seq || 0);
+  if (!ev.lines.length && !ev.images.length) return;
+  const stick = t.stream.scrollHeight - t.stream.scrollTop - t.stream.clientHeight < 40;
+  const node = el("div", "ev");
+  node.append(el("span", "when", fmtClock(ev.t_rel_s)), el("span", "type", ev.type));
+  for (const line of ev.lines) {
+    const ln = el("div", "ln " + line.kind, line.text);
+    if (line.kind === "thinking" || line.kind === "text") {
+      ln.classList.add("clamp");
+      ln.onclick = () => ln.classList.toggle("clamp");
+    }
+    node.append(ln);
+  }
+  if (ev.images.length) {
+    const thumbs = el("div", "thumbs");
+    for (const sha of ev.images) {
+      const img = el("img");
+      img.loading = "lazy";
+      img.src = panoUrl(id, "/views/" + encodeURIComponent(sha));
+      img.onerror = () => img.remove();
+      img.onclick = () => window.open(img.src, "_blank", "noopener");
+      thumbs.append(img);
+    }
+    node.append(thumbs);
+  }
+  t.stream.append(node);
+  while (t.stream.childElementCount > 500) t.stream.firstElementChild.remove();
+  if (stick) t.stream.scrollTop = t.stream.scrollHeight;
+}
+
+async function loadBacklog(t) {
+  const res = await api("GET", panoUrl(t.id, "/events?after=" + t.lastSeq));
+  if (res.ok) for (const ev of res.data.events) appendEvent(t.id, ev);
+}
+
+// ---------------------------------------------------------------- run-level state
+
+function applyState(state) {
+  run = state;
+  document.getElementById("run-id").textContent = "run " + (state.run_id || "?") + "  ·  " + (state.team || "");
+  const mode = document.getElementById("mode");
+  mode.textContent = state.no_human ? "AUTONOMOUS (--no-human)" : "HUMAN CHANNELS ON (penalised)";
+  mode.className = "badge " + (state.no_human ? "mode-auto" : "mode-human");
+  const ids = state.panoramas.map((p) => p.panorama_id);
+  for (const [id, t] of tiles) if (!ids.includes(id)) { t.root.remove(); tiles.delete(id); }
+  state.panoramas.forEach(updateTile);
+  const current = [...grid.children].map((node) => node.dataset.id);
+  if (current.join("\n") !== ids.join("\n")) {
+    for (const id of ids) { const t = tiles.get(id); t.root.dataset.id = id; grid.append(t.root); }
+    for (const t of tiles.values()) if (t.map) t.map.invalidateSize();
+  }
+}
+
+function tick() {
+  let longest = 0, done = 0, asking = 0;
+  for (const t of tiles.values()) {
+    longest = Math.max(longest, tickTile(t));
+    if (t.state.final) done += 1;
+    if (t.state.pending_mcq) asking += 1;
+  }
+  document.getElementById("run-clock").textContent = tiles.size
+    ? "T+" + fmtClock(longest) + (run.watchdog_s ? " / watchdog " + fmtClock(run.watchdog_s) : "") : "";
+  document.getElementById("progress").textContent = done + " / " + tiles.size + " final";
+  const alert = document.getElementById("mcq-alert");
+  alert.hidden = asking === 0;
+  alert.textContent = asking + " MCQ waiting";
+  document.title = (asking ? "(" + asking + " MCQ) " : "") + "geoagent operator";
+}
+
+function connect() {
+  const dot = document.getElementById("conn");
+  const es = new EventSource("/api/stream");
+  es.onopen = () => dot.classList.add("up");
+  es.onerror = () => dot.classList.remove("up");  // EventSource reconnects on its own
+  es.addEventListener("snapshot", (e) => {
+    applyState(JSON.parse(e.data));
+    for (const t of tiles.values()) loadBacklog(t);
+  });
+  es.addEventListener("event", (e) => {
+    const msg = JSON.parse(e.data);
+    updateTile(msg.state);
+    appendEvent(msg.panorama_id, msg.event);
+  });
+}
+
+document.getElementById("finalize-all").onclick = async () => {
+  if (!window.confirm("Finalize ALL panoramas with their current best lists?")) return;
+  const res = await api("POST", "/api/finalize_all");
+  if (res.ok) applyState(res.data); else toast(errorText(res));
+};
+document.getElementById("export").onclick = async () => {
+  const res = await api("POST", "/api/export");
+  if (res.ok) toast("Exported " + res.data.paths.length + " files:\n" + res.data.paths.join("\n"), true);
+  else toast(errorText(res));
+};
+
+connect();
+setInterval(tick, 500);
+// Safety net for state changes that emit no event.
+setInterval(async () => { const res = await api("GET", "/api/state"); if (res.ok) applyState(res.data); }, 5000);
+</script>
+</body>
+</html>

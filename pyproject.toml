@@ -1,0 +1,28 @@
+[project]
+name = "geoagent"
+version = "0.1.0"
+description = "Panorama localisation agent (Albatroz Challenge, JunctionX Lisbon 2026)"
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=0.116",
+    "pydantic>=2.7",
+    "opencv-python-headless>=4.9",
+    "numpy>=1.26",
+    "Pillow>=10",
+    "httpx>=0.27",
+    "pvlib>=0.11",
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "typer>=0.12",
+    "python-dotenv>=1.0",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-asyncio>=0.24"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.uv]
+package = false
