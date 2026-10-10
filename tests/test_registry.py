@@ -66,14 +66,14 @@ async def test_execute_logs_call_and_result(monkeypatch: pytest.MonkeyPatch) -> 
     calls = install(monkeypatch, "satellite_tile", handler)
     ctx = make_ctx()
     args = {"lat": 1.0, "lng": 2.0, "zoom": 15}
-    result = await registry.execute_tool(ctx, "satellite_tile", args, tool_use_id="toolu_1")
+    result = await registry.execute_tool(ctx, "satellite_tile", args, tool_use_id="call_1")
     assert calls == [args] and not result.is_error
 
     (call_actor, call_type, call), (result_actor, result_type, logged) = ctx.session.log.events
     assert (call_actor, call_type) == ("agent", "tool_call")
-    assert call == {"tool": "satellite_tile", "tool_use_id": "toolu_1", "input": args}
+    assert call == {"tool": "satellite_tile", "tool_use_id": "call_1", "input": args}
     assert (result_actor, result_type) == ("tool", "tool_result")
-    assert logged["tool"] == "satellite_tile" and logged["tool_use_id"] == "toolu_1"
+    assert logged["tool"] == "satellite_tile" and logged["tool_use_id"] == "call_1"
     assert logged["is_error"] is False and isinstance(logged["duration_ms"], int) and logged["duration_ms"] >= 0
     assert logged["urls"] == ["https://example.test/export"]
     assert logged["log"] == {"image": {"sha256": "abc", "path": "x.jpg"}}

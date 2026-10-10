@@ -92,7 +92,8 @@ def test_every_tool_is_mentioned_when_web_is_allowed() -> None:
     settings = Settings()
     text = prompts.build_system_prompt(settings)
     for tool in tool_definitions(settings):
-        assert tool["name"] in text, tool["name"]
+        name = tool.get("name") or tool["type"]  # hosted tools are named by their type
+        assert name in text, name
 
 
 def test_offline_prompt_drops_external_tools() -> None:

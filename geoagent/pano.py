@@ -18,7 +18,7 @@ from typing import Any
 import cv2
 import numpy as np
 
-MAX_SIDE = 2000  # requests with more than 20 images reject anything larger
+MAX_SIDE = 2000  # image tokens grow with area: this caps one view at about 4,800 input tokens
 MIN_FOV = 5.0
 MAX_FOV = 120.0
 MIN_ZOOM_SIDE = 512

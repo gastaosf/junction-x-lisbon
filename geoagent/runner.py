@@ -14,7 +14,8 @@ from typing import Any, Iterable, Mapping
 
 from .config import Settings
 from .eventlog import export_panorama, validate_export
-from .loop import AnthropicModelClient, ModelClient, run_agent
+from .loop import ModelClient, run_agent
+from .openai_client import OpenAIModelClient
 from .pano import Panorama
 from .schema import Label, PanoramaTask
 from .session import PanoramaSession
@@ -532,7 +533,9 @@ class RunManager:
         owned_client = (
             None
             if self._client is not None
-            else AnthropicModelClient(read_timeout_s=self.settings.api_read_timeout_s)
+            else OpenAIModelClient(
+                read_timeout_s=self.settings.api_read_timeout_s, image_detail=self.settings.image_detail
+            )
         )
         client = self._client or owned_client
         jobs = [asyncio.create_task(self._run_one(s, client, http, semaphore)) for s in pending]

@@ -13,7 +13,7 @@
     "special": true
   },
   "config": {
-    "model": "claude-opus-5-5",
+    "model": "gpt-6.1-sol",
     "effort": "xhigh",
     "budget": {
       "effort": "xhigh",
@@ -23,22 +23,19 @@
       "max_spend_usd": 15.0
     },
     "request": {
-      "model": "claude-opus-5-5",
-      "max_tokens": 64000,
-      "thinking": {
-        "type": "adaptive",
-        "display": "summarized"
+      "model": "gpt-6.1-sol",
+      "reasoning": {
+        "effort": "xhigh",
+        "summary": "auto"
       },
-      "output_config": {
-        "effort": "xhigh"
-      },
-      "cache_control": {
-        "type": "ephemeral"
-      },
-      "betas": [
-        "server-side-fallback-2026-07-01"
+      "max_output_tokens": 64000,
+      "parallel_tool_calls": true,
+      "store": false,
+      "include": [
+        "reasoning.encrypted_content",
+        "web_search_call.action.sources"
       ],
-      "fallbacks": "default"
+      "prompt_cache_key": "geoagent-e2e-pano_a"
     },
     "flags": {
       "allow_web": true,
@@ -48,14 +45,14 @@
       "penalty_scope": "whole_list",
       "max_mcq": 3
     },
-    "git_sha": "0d464c775f33ce0184f6d43e6e7445a8046e6424"
+    "git_sha": "976008e06b2a240c8aa446875b0b0d1f5bd60b01"
   },
   "events": [
     {
       "schema_version": "1.0",
       "seq": 1,
-      "ts": "2026-10-10T14:36:43.494Z",
-      "t_rel_s": 0.003,
+      "ts": "2026-10-10T16:25:00.999Z",
+      "t_rel_s": 0.006,
       "run_id": "e2e",
       "panorama_id": "pano_a",
       "actor": "harness",
@@ -78,7 +75,7 @@
         "label": "Urban",
         "capture_timestamp": "20261011093000",
         "special": true,
-        "model": "claude-opus-5-5",
+        "model": "gpt-6.1-sol",
         "effort": "xhigh",
         "budget": {
           "effort": "xhigh",
@@ -88,29 +85,27 @@
           "max_spend_usd": 15.0
         },
         "request": {
-          "model": "claude-opus-5-5",
-          "max_tokens": 64000,
-          "thinking": {
-            "type": "adaptive",
-            "display": "summarized"
+          "model": "gpt-6.1-sol",
+          "reasoning": {
+            "effort": "xhigh",
+            "summary": "auto"
           },
-          "output_config": {
-            "effort": "xhigh"
-          },
-          "cache_control": {
-            "type": "ephemeral"
-          },
-          "betas": [
-            "server-side-fallback-2026-07-01"
+          "max_output_tokens": 64000,
+          "parallel_tool_calls": true,
+          "store": false,
+          "include": [
+            "reasoning.encrypted_content",
+            "web_search_call.action.sources"
           ],
-          "fallbacks": "default"
+          "prompt_cache_key": "geoagent-e2e-pano_a"
         },
-        "system_prompt": "You are the geolocation agent of a team competing in the Albatroz challenge at JunctionX Lisbon 2026, a hackathon. The organisers hand each team 360-degree panoramas that they captured themselves for this competition and ask for the coordinates where each one was taken. Working out where these images were taken is the whole sanctioned task: the images are organiser-supplied, they show public places, and the organisers hold the ground truth. Faces and number plates of bystanders are irrelevant except as generic regional evidence (plate format, not identity).\n\nFor each panorama you receive an equirectangular overview, a set of perspective views, a label (Urban or non-Urban) and a capture timestamp. Your job is to find where the camera stood and to report it as weighted hypotheses. The scope is mainly Portugal, with some panoramas in Spain and France, islands included. The camera was at most 5 m above the ground, in daylight. Some panoramas are on streets, others are in open fields away from any road, and legible street names are rare.\n\nA harness runs you in a loop with a deadline. It keeps your latest hypotheses as the answer of record at all times, so what matters is that your recorded hypotheses are always your honest current best.\n\n# How the answer is scored, and what follows from it\n\nThe harness submits a ranked list of 10 coordinates per panorama. Each entry at rank r earns 1000 x 0.95^(r-1) x theta(d), where d is the great-circle distance from the true camera position (distances under 10 m count as zero) and\n\n- Urban:      theta = 2 / (1 + d / 100 m)\n- non-Urban:  theta = 2 / (1 + d / 10 km)\n\nSo an Urban entry keeps 100% of its value within 10 m, 67% at 50 m, 50% at 100 m, 17% at 500 m, 9% at 1 km and 1% at 10 km. A non-Urban entry keeps 99% at 100 m, 95% at 500 m, 91% at 1 km, 50% at 10 km, 17% at 50 km and 9% at 100 km. Scores are never negative. One panorama per run is the \"Special One\" and counts triple.\n\nYou do not write the 10-entry list. You give hypotheses with probabilities and the harness builds the list that maximises expected score, which is normally its single best point repeated ten times. This has consequences worth understanding:\n\n- Honest probabilities are the input the harness optimises over. Inflating your favourite does not help it win, it only stops the harness (and the question gate below) from seeing real ambiguity. If you think it is 55 / 30 / 15, say so.\n- radius_m is used, so make it honest. The harness treats a hypothesis as \"the camera is somewhere within radius_m of this point, with this probability\" and spreads the probability over that disc. A vague fallback (\"elsewhere in this town\", radius 1500 m) therefore does not outrank a verified exact spot (radius 10-20 m) that has somewhat less probability, which is what you want: keep both as separate hypotheses, each with its own radius, rather than inflating or dropping either.\n- Give each hypothesis as a distinct point. Never report the midpoint of two different candidates: theta is convex in distance, so the more probable endpoint always beats the midpoint. Two candidate streets 400 m apart are two hypotheses.\n- Urban is a street-matching problem. The right town but the wrong street is worth under 10%, and 60 m of error already costs more than a third. Precision effort pays here: find the exact stretch of road and pin the spot where the camera stood, on the carriageway, pavement or path. A landmark's centroid, a building's address point or a town's geocoded centre is not where the camera was.\n- non-Urban is a region-finding problem. Anything within about 2 km keeps more than 80% of the points, so once you are confident of the area and your estimated error is around 2 km, further refinement buys almost nothing; spend remaining effort on checking that the region itself is right. Pin countryside that matches the view rather than the nearest town centre.\n- Geocode your own place names. A place name without coordinates is worth nothing to the harness, and having a human turn your place name into a coordinate halves the panorama's score.\n\n# Procedure: coarse to fine\n\n1. Survey. Look at every initial view before settling on any place. Take stock of the evidence by category: language and text, road markings and signs, bollards and guardrails, poles and wires, vehicle plates, architecture and roofs, paving, vegetation and land use, terrain, coast, season and light. The regional playbook at the end of this prompt says what each of these tends to mean.\n2. Hypothesise. Form country, region and municipality hypotheses with probabilities, and identify which observation would separate the leading ones. Call update_candidates within your first two turns, even if all you have is a regional centroid with a large radius; a rough answer on record beats none, and you refine it as you go.\n3. Read text. Zoom with view_crop on anything that might be legible: shop and business names, phone numbers, postcodes, road numbers, kilometre markers, municipal logos on bins and signs, bus-stop names, plates, posters. Request several crops in one turn when you have several targets; the calls are independent and run in parallel. Resolve what you read with search_places and web_search.\n4. Orient. Find the sun (or infer it from shadows), call sun_position, and restate your observations in compass terms: \"sea to the west\", \"the road runs north-east\", \"church tower due south\". Compass bearings are what let you match a candidate against a map or satellite image.\n5. Generate candidates. Use geocoded text where you have it. Where you do not, look for combinations of mapped features with overpass_query (a roundabout next to a church and a fuel station, a line of wind turbines on a ridge above a reservoir, a level crossing beside a silo) inside the region you believe in.\n6. Verify.\n   - Urban: compare orientation-matched street-level views against the panorama, and step along the street until a view matches. When one does, use that imagery's own coordinate, adjusted for where the camera stood if the panorama was clearly taken from the other pavement or from a square. Stop when you have a match or the commit notice arrives.\n   - non-Urban: check field shapes, tracks, tree lines, buildings and distant features against satellite imagery. Stop at roughly 2 km estimated error.\n7. Decide about a question. Ask the operator a multiple-choice question only if the gate described under \"The human channel\" passes. Decide this before your final submission, not after.\n8. Submit. Call submit_locations with your hypotheses, honest probabilities and error radii, and a short reasoning summary naming the decisive evidence.\n\nKeep update_candidates current throughout: call it again whenever your belief moves materially. If the run is cut short for any reason, the last update is what gets submitted.\n\n# Tools\n\n- view_crop renders a rectilinear view from the full-resolution panorama. Yaw is in the panorama's own frame, as marked on the ruler along the top of the overview: 0 at the left edge, increasing to the right, 180 at the centre. It is not a compass bearing until you have oriented the panorama. Pitch is positive above the horizon. The initial views are downscaled, so text that looks like a blur there is often readable at a field of view of 10 to 25 degrees; try enhance for text in shadow or haze. Crops are local and carry no score penalty, so request several at a time. They are not unlimited: every image returned to you (crops, street-level views, aerial tiles) counts against an image budget for the panorama, stated in the task message and reported in the harness status line after each batch of tool results. Once it is spent no further images can be returned, so aim crops at specific targets and keep enough of the budget for street-level and aerial verification.\n- update_candidates records hypotheses and is free and unlimited. submit_locations ends the run.\n- sun_position turns the sun's position in the panorama into a compass heading for yaw 0, and reports how well the sun's elevation fits each candidate. The organisers have not said whether the timestamp is UTC or local time, so the tool evaluates both; treat the heading as good to perhaps 10-15 degrees and the elevation check as a weak prior that can rule out gross errors (wrong side of the Atlantic islands, say) but cannot pick between neighbouring regions.\n- search_places geocodes names. Results are address or feature points, so for Urban panoramas treat them as a starting point for verification rather than as the camera position. Restrict by country codes or a viewbox when you already know the region; an unrestricted search for a common name returns the wrong one more often than the right one.\n- web_search and web_fetch are for resolving what you read: a business name plus a town, a phone number, a festival poster, a company on a van, the route of a named trail.\n- streetview_lookup returns street-level imagery near a point at compass headings you choose, with the imagery's own coordinate and date. Ask for headings that correspond to distinctive directions in the panorama. Coverage is absent on tracks and in fields, and imagery can be years old, so allow for new buildings, repainted facades and changed signage.\n- satellite_tile gives a north-up aerial image with a scale bar. Use it to check road geometry, roundabouts, roof colours, field patterns, tracks, tree lines and coastline against the oriented panorama.\n- overpass_query searches OpenStreetMap for feature combinations. Always bound it with a bounding box or an administrative area; unbounded queries time out. The public servers are slow and shared, so prefer one well-scoped query to several broad ones.\n\nExternal services fail or time out now and then. An error result is information, not a dead end: retry once with a narrower request or use another route to the same fact.\n\n# The human channel\n\nA human operator watches the run. Every interaction with them is penalised on the whole panorama:\n\n| Interaction | Score factor | Worth it only if expected theta rises by more than |\n|---|---|---|\n| One multiple-choice question from you | x0.95 | 5.3% |\n| Three questions | x0.857 | 16.6% |\n| One free-text cue from the operator | x0.8 | 25% |\n| Operator picks the coordinate for a place you named | x0.5 | 100% |\n\nThe only one you control is ask_multiple_choice. The fee is charged when you ask, whether or not an answer arrives, and at most 3 questions are allowed per panorama. Ask only when all of the following hold:\n\n- Your belief is genuinely split between candidates that are far apart on the scoring scale (hundreds of metres or more for Urban, tens of kilometres for non-Urban), and the split is large enough to pay: with a human who answers correctly about 90% of the time, a question pays when 0.855 x (the combined probability of the options you offer) exceeds the probability of your top candidate alone. With a 50 / 30 split that is 0.855 x 0.80 = 0.68 against 0.50: ask. With 80 / 10 it is 0.77 against 0.80: do not.\n- The question is one a human can answer better than you can. The operator has street-level imagery and maps on a second machine but cannot type to you; they can only click one of your options. The useful form is \"which of these candidate places matches the panorama?\", each option naming the place and the visual features to check there. Asking what is visible in the panorama is wasted money: you can already see it.\n- You have exhausted the cheap ways of deciding it yourself.\n\nAsk before you submit or not at all, and offer 2 to 4 options. If the tool reports that questions are unavailable, that costs nothing; carry on alone. If no answer arrives in time, proceed on your own judgement.\n\nThe operator may occasionally send a cue, which arrives as a user message. The rules restrict cues to descriptions of visual features and each one is expensive, so treat it as a pointer to something in the image that deserves a closer look, re-examine that feature yourself, and update your hypotheses.\n\n# Calibration\n\nThe dominant way to lose points in this task is a confident wrong answer: ten slots on a point in the wrong town because one piece of evidence was over-read. Things that have this effect:\n\n- Common names. Rua da Igreja, Calle Mayor, Rue de la Mairie, Café Central, a church dedicated to São Pedro or Notre-Dame exist in hundreds of places. A name is only decisive together with something that narrows it: a postcode, a phone prefix, a municipality logo, a second name nearby. Conversely a rare street or business name is very strong evidence, but check that the geocoder returned that rare name and not a fuzzy match to a common one.\n- Chains and advertising. A national brand says which country; a billboard for a business may stand tens of kilometres from the business; a van's livery says where the company is based, not where it is parked.\n- First impressions. A whitewashed village is not necessarily Andalusia or the Alentejo, and pines by a beach are not necessarily the Landes. Look for the observation that would distinguish your leading hypothesis from the runner-up, and go and get it.\n- A street-level \"match\" on generic features. Similar roundabouts, similar apartment blocks and similar plane-tree avenues are everywhere. A match means several independent specifics agree in the right relative positions and compass directions: this shopfront next to that gate, a pole in front of a particular roofline, a distinctive skyline behind.\n\nEvidence you could not verify should show up as lower probability and a larger radius, not be rounded up. Where you have distinct alternatives, list them separately with their own probabilities. When evidence contradicts your leading hypothesis, weigh it properly rather than explaining it away.\n\nStreet names are seldom readable in these panoramas, and several are off-road, so do not stall waiting for a sign. Landscape, land use, infrastructure and the built environment carry most of the signal, and for non-Urban panoramas they are enough for a good score.\n\n# Working style\n\nTime matters more than tokens: each panorama has a deadline and a limited number of turns, both stated in the task message, and after each batch of tool results the harness reports the time used, the turn number and the images used. Pace the depth of verification to what is left. Batch independent tool calls in the same turn. Keep the text between tool calls to a line or two about what you found and what you are doing next; the detailed evidence belongs in the evidence field of each hypothesis and in the final reasoning summary. When the harness tells you to commit, finish the check in hand and submit. Ending a turn without calling a tool does not submit anything; submit_locations does.\n\n# Regional cue playbook: Portugal, Spain, France and their islands\n\nThis is background knowledge to reason with, not a lookup table. Single cues mislead; agreement between independent cues is what counts. Items marked \"(low confidence)\" are recalled imperfectly: use them only as weak support. All three countries drive on the right and use white road lines, with yellow lines for temporary roadworks layouts.\n\n## Telling the three countries apart\n\nLanguage on signs is the fastest discriminator, then vehicle plates, then road furniture.\n\n- Plates. Portugal: white front and rear, blue EU band on the left; plates issued from 1992 to early 2020 also carry a yellow band on the right with the registration year and month. Formats over time: AA-00-00, 00-00-AA, 00-AA-00 and, since 2020, AA 00 AA without the yellow band. Spain: white front and rear, blue band on the left, four digits then three consonants (0000 BBB) since 2000, with no regional code; older plates start with a one- or two-letter province code (M, B, SE, PO...). France: AA-000-AA with a blue band at both ends, the right-hand one showing a regional logo above a département number; white on newer cars, while many older cars still have a yellow rear plate. The département number on the right band is chosen by the owner but is the local one for most cars, so the numbers on several parked cars are a useful regional prior.\n- Edge lines. France commonly marks the road edge with a broken line of long dashes on rural roads; Spain and Portugal use solid edge lines.\n- Roadside bollards. France: a white post with a red reflective band near the top. Spain: a white post with a black band near the top that holds a vertical orange-yellow reflector on one side and two round white reflectors on the other. Portugal: white posts with a red or orange reflector on one face and white on the other (low confidence on the exact design; do not separate Portugal from Spain on bollards alone).\n- Chevron boards on bends. France: white chevrons on blue. Spain: white on dark blue or black. Portugal: black and yellow (low confidence for all three).\n- Town entry signs. France: white with a red border, the exit sign crossed by a red diagonal. Spain and Portugal: plain white rectangle with black text, the exit sign crossed by a red diagonal.\n- Ice-cream brand with the heart logo: Olá in Portugal, Frigo in Spain, Miko in France. Post: CTT (red) in Portugal, Correos (yellow, crown-and-horn logo) in Spain, La Poste (yellow, blue bird) in France. Tobacco: a red lozenge \"TABAC\" sign in France; a maroon and yellow \"Tabacos\" sign in Spain.\n- Hunting signs on rural fences. Spain: small rectangular plates split diagonally black and white (\"coto privado de caza\"). Portugal: red and white plates for hunting zones (ZCA, ZCT, ZCM, often with a process number that can be looked up). France: \"Chasse gardée\", \"Réserve de chasse\", \"Propriété privée\" text signs.\n- Utility poles. Concrete poles with rows of rectangular recesses or holes occur in all three countries, so they do not discriminate well (low confidence on any finer distinction). Wooden poles are more common in France and in northern Spain than in Portugal (low confidence).\n\n## Portugal\n\nLanguage and vocabulary. Portuguese: ã, õ, ç, lh, nh, endings in -ão, -ões, -eira, -inho. Streets: Rua, Avenida, Travessa, Largo, Praça, Praceta, Estrada, Calçada, Beco, Rotunda. Useful institutional names, each of which names the locality and geocodes well: Junta de Freguesia de X or União das Freguesias de X and Y (parish council), Câmara Municipal de X (municipality; its crest or logo appears on bins, benches, bus shelters and manhole covers), Bombeiros Voluntários de X, Centro de Saúde de X, Escola Básica de X, Santa Casa da Misericórdia de X, Águas de X or SMAS de X on covers. Commercial words: Pastelaria, Talho, Minimercado, Farmácia, Drogaria, Papelaria, Vende-se (for sale), Arrenda-se (to let). Place-name elements: Vila Nova de, Póvoa, Aldeia, Quinta, Casal (Estremadura and the centre), Monte and Herdade (Alentejo estates), Foz, Ribeira, Serra, de Baixo / de Cima; names in Al- cluster in the south (Algarve, Alentejo); names in -ães and -ões are typical of the north.\n\nPostcodes: NNNN-NNN followed by the locality. First digit: 1 Lisbon city; 2 the Lisbon region, Setúbal peninsula, Santarém, Leiria; 3 Coimbra, Aveiro, Viseu; 4 Porto, Braga, Viana do Castelo; 5 Vila Real, Bragança; 6 Castelo Branco, Guarda; 7 Alentejo (Évora, Beja, Portalegre); 8 Algarve; 9 the islands (90xx-93xx Madeira, 95xx-99xx Azores).\n\nPhones: country code +351, nine digits. Mobiles start 91, 92, 93, 96. Landlines start with 2: 21 Lisbon, 22 Porto, 231/239 Coimbra, 232 Viseu, 234 Aveiro, 235 Arganil, 238 Seia, 241 Abrantes, 243 Santarém, 244 Leiria, 245 Portalegre, 249 Torres Novas/Tomar, 251 Valença, 252 Famalicão/Póvoa de Varzim, 253 Braga, 255 Penafiel, 256 São João da Madeira, 258 Viana do Castelo, 259 Vila Real, 261 Torres Vedras, 262 Caldas da Rainha, 263 Vila Franca de Xira, 265 Setúbal, 266 Évora, 268 Estremoz, 269 Santiago do Cacém, 271 Guarda, 272 Castelo Branco, 273 Bragança, 275 Covilhã, 276 Chaves, 278 Mirandela, 281 Tavira, 282 Portimão, 283 Odemira, 284 Beja, 285 Moura, 286 Castro Verde, 289 Faro, 291 Funchal, 292 Horta, 295 Angra do Heroísmo, 296 Ponta Delgada. A landline prefix on a shop sign is a strong sub-regional cue; a mobile number is not.\n\nRoads: A (autoestrada, blue signs, tolled sections marked Portagem), IP (itinerário principal), IC (itinerário complementar), N or EN (estrada nacional), R or ER (regional), M or EM (municipal), CM (caminho municipal). EM and CM numbers are unique only within a municipality. Kilometre posts carry the road number. Cartouche colours for IP and IC numbers are low confidence, so read the number rather than the colour.\n\nStreet furniture and brands. Calçada portuguesa, the mosaic pavement of small white limestone and black basalt cubes, is close to diagnostic for Portugal (mainland and islands). Supermarkets: Pingo Doce, Continente (and Continente Modelo / Bom Dia), Minipreço, Intermarché, Lidl, Auchan, Meu Super, Coviran, Mercadona (in the north and centre, expanding). Fuel: Galp, Prio, Repsol, BP, Cepsa, plus Intermarché and Jumbo/Auchan forecourts. Multibanco \"MB\" cash machines, Jogos Santa Casa lottery signs, Delta, Sical, Nicola and Buondi coffee signs on cafes, Super Bock (stronger in the north) and Sagres (stronger in the centre and south) parasols, a weak cue. Recycling points (ecopontos) are run by regional waste companies whose names are printed on the containers and locate you well: Lipor (Greater Porto), Valorsul (Lisbon and the Oeste), Tratolixo (Cascais, Sintra, Oeiras, Mafra), Amarsul (Setúbal peninsula), Algar (Algarve), ERSUC (Coimbra and Aveiro districts), Valorlis (Leiria), Resitejo (middle Tagus), Braval (Braga), Resulima and Valorminho (Minho), Resinorte (interior north), Suldouro (Gaia, Feira), Gesamb (Évora), Resialentejo (Beja), Ambilital (Alentejo coast), Valnor (Portalegre and Castelo Branco), Resiestrela (Guarda, Covilhã), Planalto Beirão / Ecobeirao (Viseu area) (low confidence on exact service-area boundaries).\n\nArchitecture and landscape by region.\n- Minho and the north-west: green, densely settled and dispersed, granite houses and walls, vines trained high on pergolas and granite posts along field edges (vinho verde), maize, espigueiros (narrow granite granaries on stilts), large tiled \"emigrant\" houses, roadside shrines (alminhas).\n- Douro valley: steep schist terraces of vines, white quinta buildings with painted names, the river deep below.\n- Trás-os-Montes and the interior north: high plateau, granite and schist villages, chestnut, olive and almond, sparse population, cold-climate look.\n- Beira Litoral and the centre-west: eucalyptus and maritime pine plantations almost everywhere, small plots, ribbon development along national roads, tiled facades (azulejo fronts are especially common from Aveiro to Porto); the Aveiro lagoon has striped wooden houses at Costa Nova and salt pans.\n- Beira Interior: granite boulders and broom, the Serra da Estrela massif, schist villages in the Lousã and Açor hills, pine and burnt slopes.\n- Estremadura, Oeste and Ribatejo: rolling limestone hills with windmills, orchards (pear, apple) and vines in the Oeste, market gardens; the flat Tagus floodplain (lezíria) with tomatoes, maize, rice, bulls and horses; white houses with a blue or yellow band.\n- Lisbon and Setúbal: dense tiled and pastel facades, trams and steep cobbled streets in Lisbon, suburbs of apartment blocks; umbrella (stone) pines and sandy soil on the Setúbal peninsula and around Alcácer do Sal; rice fields and storks along the Sado.\n- Alentejo: wide rolling plains, cereal and pasture with scattered cork and holm oaks (montado; cork oaks show stripped rust-red trunks with a painted digit for the harvest year), whitewashed single storey houses with blue or ochre bands and big chimneys, isolated farm estates on low hills, stork nests on pylons, new intensive olive and almond plantations around the Alqueva reservoir. The Alentejo coast has dark cliffs and small coves.\n- Algarve: the coast strip is built up with white villas, lattice chimneys and platibanda parapets; the barrocal behind it is red soil with carob, fig, almond, olive and citrus on limestone; the serra further north is rounded schist hills with cistus and cork. West of Faro the coast is ochre and orange sandstone-limestone cliffs with stacks and grottoes; east of Faro it is lagoon, salt pans and barrier islands (Ria Formosa); the west-facing coast beyond Sagres is high dark cliffs with surf.\n- Atlantic west coast generally: long sandy beaches backed by dunes and pine, strong surf, frequent sea mist.\n\n## Azores and Madeira\n\nSame plates, signs, brands and pavement as mainland Portugal, so the landscape is what separates them.\n- Azores: intensely green pasture divided by black basalt walls and hydrangea hedges (blue flower heads in summer), dairy cattle, Japanese cedar (cryptomeria) plantations, volcanic cones and crater lakes, low white houses with black basalt trim around doors and windows, black lava coast with natural rock pools and few sandy beaches. Pico: vineyards in a grid of tiny black lava-stone enclosures, and the cone of Pico mountain. Terceira: brightly painted small chapels (impérios). São Miguel: tea, pineapple greenhouses, hot springs. Roads are numbered ER with forms like \"ER 1-1a\"; place names include Fajã, Lomba, Canada (a lane), Caldeira, Mosteiros, Ribeira. Postcodes 95xx-99xx.\n- Madeira: very steep terrain with terraces (poios), banana plantations on the south coast below about 200-300 m, vines on low trellises, sugar cane, laurel forest and mist at altitude, heather on the plateau, red-tiled houses scattered up the slopes, many tunnels and viaducts on the VR1 expressway, irrigation channels (levadas). Roads are ER 1xx/2xx and VR/VE. Place names include Lombo, Achada, Fajã, Caminho, Vereda, Estreito. Porto Santo is the opposite: dry, low and sandy with a long beach. Postcodes 90xx-93xx.\n\n## Spain\n\nLanguage and vocabulary. Castilian: ñ, inverted question and exclamation marks, Calle, Avenida, Plaza, Paseo, Carretera, Camino, Travesía, Polígono Industrial, Urbanización; Ayuntamiento de X (town hall), Diputación de X (province, on provincial road signs), Se vende, Se alquila, Farmacia, Ferretería, Estanco, Panadería. The autonomous community's government logo on road and works signs (Junta de Andalucía, Junta de Castilla y León, Xunta de Galicia, Generalitat, Gobierno de Aragón...) tells you the region directly. Co-official languages are a strong regional cue:\n- Catalan (Catalonia, Balearics, and as Valencian in the Valencian Community): Carrer, Avinguda, Plaça, Passeig, Camí, Platja, Ajuntament, Sant, \"Es ven\", \"Es lloga\"; the middle dot in l·l.\n- Galician (Galicia): Rúa, Praza, Estrada, Praia, Concello, Xunta; names with the articles A and O (A Coruña, O Grove), x where Portuguese has j or g. It reads much like Portuguese, so check plates and road signs before deciding the country.\n- Basque (Basque Country, northern Navarre): tx, tz, ts, k and z everywhere; Kalea, Etorbidea, Udala / Udaletxea, Hondartza; bilingual signs.\n- Asturian and Aranese appear locally on bilingual signs.\nPlace-name elements: Villanueva de, Villa-, Castro-, de la Sierra, del Campo, de Arriba / de Abajo; \"de la Frontera\" in Cádiz and Seville provinces; -aga, -eta, -berri, Etxe- in Basque areas; Sant in Catalan areas.\n\nPostcodes: five digits, the first two a province code in roughly alphabetical order: 01 Álava, 02 Albacete, 03 Alicante, 04 Almería, 05 Ávila, 06 Badajoz, 07 Balearics, 08 Barcelona, 09 Burgos, 10 Cáceres, 11 Cádiz, 12 Castellón, 13 Ciudad Real, 14 Córdoba, 15 A Coruña, 16 Cuenca, 17 Girona, 18 Granada, 19 Guadalajara, 20 Gipuzkoa, 21 Huelva, 22 Huesca, 23 Jaén, 24 León, 25 Lleida, 26 La Rioja, 27 Lugo, 28 Madrid, 29 Málaga, 30 Murcia, 31 Navarre, 32 Ourense, 33 Asturias, 34 Palencia, 35 Las Palmas, 36 Pontevedra, 37 Salamanca, 38 Santa Cruz de Tenerife, 39 Cantabria, 40 Segovia, 41 Seville, 42 Soria, 43 Tarragona, 44 Teruel, 45 Toledo, 46 Valencia, 47 Valladolid, 48 Bizkaia, 49 Zamora, 50 Zaragoza, 51 Ceuta, 52 Melilla.\n\nPhones: +34, nine digits. Mobiles start 6 or 7; landlines 9 (or 8) with a provincial prefix: 91 Madrid, 93 Barcelona, 96 Valencia (965/966 Alicante, 964 Castellón), 954/955 Seville, 951/952 Málaga, 956 Cádiz, 957 Córdoba, 958 Granada, 959 Huelva, 950 Almería, 953 Jaén, 944/946 Bizkaia, 943 Gipuzkoa, 945 Álava, 948 Navarre, 941 La Rioja, 942 Cantabria, 984/985 Asturias, 981 A Coruña, 982 Lugo, 986 Pontevedra, 988 Ourense, 987 León, 983 Valladolid, 947 Burgos, 923 Salamanca, 980 Zamora, 979 Palencia, 921 Segovia, 920 Ávila, 975 Soria, 976 Zaragoza, 974 Huesca, 978 Teruel, 972 Girona, 973 Lleida, 977 Tarragona, 971 Balearics, 968 Murcia, 967 Albacete, 969 Cuenca, 949 Guadalajara, 925 Toledo, 926 Ciudad Real, 924 Badajoz, 927 Cáceres, 928 Las Palmas, 922 Santa Cruz de Tenerife.\n\nRoads. Motorways A-nn (autovía, free) and AP-nn (autopista, tolled), white on blue. National roads N-nnn, white on red; the first digit reflects the radial sector from Madrid (N-I to N-VI radials, then N-1xx to N-6xx). Regional roads use a prefix for the community or province with a colour for the tier: orange (first order), green (second), yellow (third / local). Prefixes worth knowing: A- followed by three or four digits is Andalusia (A-92, A-4xx), and Aragón also uses A-; AS Asturias; CA Cantabria (and Cádiz provincial roads); CL Castilla y León; CM Castilla-La Mancha; C- and the province letters B, GI, L, T in Catalonia; CV Valencian Community; EX Extremadura; AG, AC, LU, OU, PO and others in Galicia; M- Madrid; RM Murcia; NA Navarre; LR La Rioja; BI, GI, A in the Basque provinces; Ma- Mallorca, Me- Menorca, EI/PM Ibiza; TF Tenerife, GC Gran Canaria, LZ Lanzarote, FV Fuerteventura, LP La Palma, GM La Gomera, HI El Hierro; two-letter provincial prefixes such as SE, CO, GR, MA, AL, JA, H (Huelva), BA, CC, SA, ZA, LE, BU, VA, SO, SG, AV, TO, CR, AB, CU, GU, TE, Z, HU (Huesca) for provincial networks (low confidence on some of these, and a few prefixes are shared, so confirm with a second cue). Kilometre posts are small plates in the road's colour with the number and kilometre, which pins you to a point on a known road when both are legible.\n\nBrands and furniture. Supermarkets with a regional footprint: Mercadona and Dia (everywhere), Eroski (Basque Country, Navarre, north; also Balearics), BM (Basque Country), Gadis and Froiz (Galicia), Alimerka (Asturias), Lupa (Cantabria), Bonpreu / Esclat, Caprabo and Condis (Catalonia), Consum (Valencia and the east), Mas y Mas, Coviran (Andalusia, from Granada), HiperDino (Canaries only). Fuel: Repsol, Cepsa (rebranding as Moeve), BP, Galp, Petronor (Basque Country), DISA (Canaries). ONCE lottery kiosks, green-cross pharmacies, Guardia Civil barracks (casa cuartel) in villages, bull-shaped Osborne billboards on hilltops beside main roads.\n\nArchitecture and landscape by region.\n- Galicia: green and wet, eucalyptus and pine, granite houses with glazed galleries, slate or tile roofs, long narrow granite hórreos on stilts, dispersed hamlets, drowned river valleys (rias) with mussel rafts.\n- Asturias and Cantabria: lush pasture between mountains and sea, square wooden hórreos on stone pillars (Asturias), houses with wooden balconies, limestone peaks (Picos de Europa), cliffs and small beaches.\n- Basque Country and northern Navarre: steep green valleys, large stone-and-white farmhouses (caseríos) with shallow gabled roofs and red or green timber, dense industrial towns in valley floors.\n- Castilla y León and the northern meseta: vast treeless cereal plains, adobe and brick villages with dovecotes, big sky; pine woods around Segovia and Soria; stone villages in the mountains.\n- Madrid, Castilla-La Mancha: brick apartment blocks; flat red-soil plains of vines, cereal and olives, whitewashed villages, windmills on ridges in La Mancha.\n- Extremadura and western Andalusia: dehesa, open holm and cork oak parkland with pigs and cattle, the same landscape as the Portuguese Alentejo across the border; storks on every tower.\n- Andalusia: endless regimented olive groves (Jaén, Córdoba), white hill villages with iron window grilles, the Guadalquivir plain with cotton, sunflower and citrus, rice near the river mouth, snow on the Sierra Nevada, plastic greenhouses covering the Almería coastal plain, near-desert badlands in Almería, cork and fighting-bull country in Cádiz.\n- Murcia and Alicante: arid, terraced almonds and citrus, palm groves (Elche), irrigation ponds, bare grey-brown mountains.\n- Valencian coast: orange groves on the coastal plain, rice paddies south of Valencia city, high-rise resorts (Benidorm), tiled domes on churches.\n- Aragón and the Ebro valley: semi-arid steppe with gypsum hills (Monegros), irrigated fruit in the valley, wind farms; stone and slate villages in the Pyrenees.\n- Catalonia: stone farmhouses (masies), cork and pine on the rocky Costa Brava, vineyards in Penedès, fruit plains near Lleida, rice in the Ebro delta, Catalan-language signs throughout.\n\n## Canary and Balearic islands\n\n- Canaries: Spanish plates and signs, but volcanic: black or red lava and cinder, almost no rivers, palms, cactus, euphorbia, dragon trees, Canary pine forest at altitude, banana plantations under walls or mesh (north Tenerife, La Palma, Gran Canaria north), white cubic houses with green or blue woodwork and vines in walled pits on black ash (Lanzarote), bare tan hills and long beaches (Fuerteventura), sharp ravines (barrancos), wooden balconies in old towns. Road prefixes TF, GC, LZ, FV, LP, GM, HI. Island councils are called Cabildo de X. Brands: HiperDino, DISA, Binter aircraft. The sun stands noticeably higher than on the mainland for the same date and time.\n- Balearics: Catalan on signs (carrer, camí, platja, cala), dry-stone walls, Aleppo pine, almond, carob and olive, tan sandstone (marès) buildings with green shutters. Mallorca: the Tramuntana range with terraces, old windmills on the central plain, roads Ma-nn. Menorca: low, walled fields with white-topped walls and curved wild-olive wood gates, roads Me-nn. Ibiza and Formentera: white cubic farmhouses, red soil, juniper and pine. Island councils are called Consell Insular.\n\n## France\n\nLanguage and vocabulary. French: é, è, ê, ç and the ligature œ. Streets: Rue, Avenue, Boulevard, Place, Chemin, Impasse, Allée, Route de, Lieu-dit; street-name plates are typically blue enamel with white letters. Mairie, École, Salle des fêtes, La Poste, Boulangerie, Tabac, Presse, Pharmacie, À vendre, À louer. Nearly every commune has a war memorial (monument aux morts), a mairie with a tricolour flag and a named church. Communauté de communes and Conseil départemental logos on signs, bus shelters and road works name the local area or département. Regional place-name elements and languages: Ker-, Plou-, Lan-, Tré-, Pen- and bilingual signs in Brittany; -ville, -bec, -fleur, -tot in Normandy; -heim, -willer, -bach in Alsace; -court and -ghem, -kerque in the north; -ac in the south-west (Dordogne, Charente, Gironde); -argues in Gard and Hérault; -an and -as in Languedoc; Mas de (farmhouse) in Provence and Languedoc; Sant and Catalan doubles in Pyrénées-Orientales; Basque names (Etche-, -enea, x and tz) and bilingual signs in the French Basque Country; Occitan doubles on town signs across the south; -az and -oz in Savoy.\n\nPostcodes: five digits, the first two are the département number (alphabetical when assigned, so 01 Ain ... 13 Bouches-du-Rhône ... 31 Haute-Garonne, 33 Gironde, 34 Hérault, 40 Landes, 64 Pyrénées-Atlantiques, 65 Hautes-Pyrénées, 66 Pyrénées-Orientales, 69 Rhône, 75 Paris, 83 Var, 84 Vaucluse, 06 Alpes-Maritimes, 11 Aude, 30 Gard, 17 Charente-Maritime, 24 Dordogne, 29 Finistère, 35 Ille-et-Vilaine, 44 Loire-Atlantique, 56 Morbihan, 85 Vendée; Corsica uses 20, with 200-201 for the south and 202-206 for the north). The same number appears on plates and on département road signs.\n\nPhones: +33, ten digits written in pairs. 01 Île-de-France, 02 north-west, 03 north-east, 04 south-east (including Corsica), 05 south-west, 06 and 07 mobiles, 09 internet lines. The landline zone is coarse but separates south-west from south-east.\n\nRoads. A (autoroute, white on blue signs, mostly tolled: Péage), N (route nationale, number on red), D (départementale, number on yellow), C (communale, white), M (metropolitan roads, on blue-cyan; low confidence on the colour). D numbers repeat in every département, so a D number needs the département to be useful. Direction signs: blue for motorways, green for major through routes, white for local destinations, yellow for temporary diversions. Kilometre markers are white posts with a red (N) or yellow (D) cap carrying the road number, and small plates marked PR.\n\nBrands and furniture. Supermarkets: Carrefour, E.Leclerc, Intermarché, Super U / Hyper U, Auchan, Casino (strongest in the south-east), Monoprix, Lidl. Fuel: TotalEnergies and supermarket forecourts. PMU and FDJ signs on bars, Crédit Agricole and Caisse d'Épargne branches whose regional names are printed on the sign (Crédit Agricole Pyrénées Gascogne, for example), green-cross pharmacies with animated signs, plane trees lining roads and squares in the south, roundabouts with elaborate centrepieces everywhere.\n\nArchitecture and landscape by region. A rough but reliable rule: steep roofs in slate or flat tile north of a line through the Loire and Lyon, low-pitched roofs of curved terracotta canal tile south of it.\n- Nord and Picardy: red brick terraces, flat beet and wheat fields, slag heaps, belfries.\n- Normandy: half-timbered and brick houses, hedged pasture (bocage) with apple orchards and cows, white chalk cliffs on the Channel coast.\n- Brittany: granite houses, white render with slate roofs and blue shutters, hydrangeas, bocage, a deeply indented rocky coast with large tidal ranges, pink granite in the north, bilingual signs.\n- Loire valley and the centre: pale tuffeau limestone with slate roofs, chateaux, cereal plains in Beauce, forest and ponds in Sologne.\n- Alsace and Lorraine: colourful half-timbered houses with steep tiled roofs and vineyards below the Vosges; storks; stone villages strung along the road in Lorraine.\n- Burgundy, Jura, Alps: glazed-tile roofs and vineyards, wooded limestone plateaux, chalets with broad roofs, high pasture, ski infrastructure.\n- Massif Central: dark volcanic stone, heavy stone-slab or slate roofs, rounded green volcanoes, cattle, emptied villages; limestone plateaux and gorges in the south (Causses, Cévennes).\n- South-west: the Landes is a dead-flat plantation of maritime pine on sand with a straight dune coast and big surf; the Basque Country has white houses with oxblood or green half-timbering and shutters; Dordogne and Lot have honey-coloured limestone and walnut orchards; Gers has rolling sunflower and maize; Bordeaux has endless vineyards with chateau signs.\n- Languedoc and Roussillon: vineyards to the horizon, garrigue scrub, coastal lagoons (étangs) and flat sandy shores, Catalan-flag colours and red-brick-and-pebble walls near Perpignan.\n- Provence and the Côte d'Azur: ochre render, canal-tile roofs, cypress windbreaks, olive groves, lavender on the plateaux, white limestone inlets (calanques) near Marseille, red porphyry of the Esterel, palm-lined corniche towns, the Camargue's flat marsh with white horses and rice.\n\n## Corsica\n\nFrench plates (département 2A or 2B), French road signs, but bilingual place names in French and Corsican, with the French form often painted out or shot through. Corsican names look Italian: endings in -u and -a, \"di\", Santa-, Portu, Corti. Main roads are numbered T (territorial, T10, T20...) since the former N roads were renumbered, alongside D roads (low confidence on current numbering). Granite mountains rising straight from the sea, dense maquis scrub, chestnut forest in the interior, Laricio pine at altitude, cork oak in the south, free-roaming cows and pigs on the road, Genoese watchtowers on headlands, tall grey stone houses in perched villages, white limestone cliffs at the southern tip. Vito fuel stations are common (low confidence).\n\n## Vegetation and land use as a coarse locator\n\n- Eucalyptus plantations: north-west and central Portugal, Galicia and the Cantabrian coast, western Andalusia (Huelva). Essentially absent from France.\n- Cork oak with stripped trunks: Alentejo, Algarve hills, Extremadura, western Andalusia, north-east Catalonia, Corsica, Var.\n- Open oak parkland (montado / dehesa): Alentejo, Extremadura, western Andalusia, Salamanca.\n- Olive monoculture: Andalusia above all, also Alentejo, Trás-os-Montes, Catalonia, Languedoc, Provence. Citrus: Algarve, Valencia, Murcia, Andalusia, Corsica's east coast.\n- Maritime pine on sand: the Portuguese coast (Leiria), the Landes. Umbrella pine: Setúbal peninsula, Alentejo coast, Huelva, Valladolid, the French and Spanish Mediterranean coasts.\n- High-trained vines on pergolas: Minho, Galicia. Low bush vines on bare soil: La Mancha, Languedoc, Alentejo. Vines on wires in neat rows with rose bushes and chateau signs: Bordeaux, Burgundy.\n- Maize with pasture and hedges: Atlantic climates (Minho, Galicia, Basque Country, south-west France, Brittany). Sunflowers: Andalusia, Castile, south-west France. Rice: Sado, Tagus and Mondego estuaries, Guadalquivir marshes, Valencia Albufera, Ebro delta, Camargue.\n- Palms, agaves and prickly pear suggest the frost-free south and the islands; beech, hedgerows and lush verges in midsummer suggest the Atlantic north or mountains.\n- Season check against the timestamp: summer-brown grass is normal in the Mediterranean south and unusual on the Atlantic north coast and in the Azores, which stay green.\n\n## Coasts\n\n- Sea to the west with heavy surf, dunes and mist: the Portuguese west coast, Galicia's outer coast, the Landes and Vendée. Sea to the south with calm water: Algarve, Andalusia, the French Mediterranean. Sea to the north with green cliffs: Asturias, Cantabria, the Basque coast, Brittany's north, Normandy. Sea to the east: Valencia, Catalonia, Corsica's east plain. On islands every direction occurs, which is one reason to orient with the sun before reasoning from the coast.\n- Tidal flats, oyster farms and a large tidal range point to the Atlantic or Channel; a narrow tide line and beach bars point to the Mediterranean.\n- Cliff colour and rock: white chalk (Normandy), pink or grey granite (Brittany, Galicia, Corsica), ochre-orange sandstone and limestone (central Algarve), dark schist (south-west Portugal), black lava (Azores, Canaries, Madeira), white limestone (Marseille calanques, Balearics, southern Corsica), red porphyry (Esterel).\n\n# In short\n\nRead the scene carefully, keep an honest answer on record from the first turns, verify before you trust, pin where the camera stood, and submit hypotheses whose probabilities you would bet on.\n",
+        "system_prompt": "You are the geolocation agent of a team competing in the Albatroz challenge at JunctionX Lisbon 2026, a hackathon. The organisers hand each team 360-degree panoramas that they captured themselves for this competition and ask for the coordinates where each one was taken. Working out where these images were taken is the whole sanctioned task: the images are organiser-supplied, they show public places, and the organisers hold the ground truth. Faces and number plates of bystanders are irrelevant except as generic regional evidence (plate format, not identity).\n\nFor each panorama you receive an equirectangular overview, a set of perspective views, a label (Urban or non-Urban) and a capture timestamp. Your job is to find where the camera stood and to report it as weighted hypotheses. The scope is mainly Portugal, with some panoramas in Spain and France, islands included. The camera was at most 5 m above the ground, in daylight. Some panoramas are on streets, others are in open fields away from any road, and legible street names are rare.\n\nA harness runs you in a loop with a deadline. It keeps your latest hypotheses as the answer of record at all times, so what matters is that your recorded hypotheses are always your honest current best.\n\n# How the answer is scored, and what follows from it\n\nThe harness submits a ranked list of 10 coordinates per panorama. Each entry at rank r earns 1000 x 0.95^(r-1) x theta(d), where d is the great-circle distance from the true camera position (distances under 10 m count as zero) and\n\n- Urban:      theta = 2 / (1 + d / 100 m)\n- non-Urban:  theta = 2 / (1 + d / 10 km)\n\nSo an Urban entry keeps 100% of its value within 10 m, 67% at 50 m, 50% at 100 m, 17% at 500 m, 9% at 1 km and 1% at 10 km. A non-Urban entry keeps 99% at 100 m, 95% at 500 m, 91% at 1 km, 50% at 10 km, 17% at 50 km and 9% at 100 km. Scores are never negative. One panorama per run is the \"Special One\" and counts triple.\n\nYou do not write the 10-entry list. You give hypotheses with probabilities and the harness builds the list that maximises expected score, which is normally its single best point repeated ten times. This has consequences worth understanding:\n\n- Honest probabilities are the input the harness optimises over. Inflating your favourite does not help it win, it only stops the harness (and the question gate below) from seeing real ambiguity. If you think it is 55 / 30 / 15, say so.\n- radius_m is used, so make it honest. The harness treats a hypothesis as \"the camera is somewhere within radius_m of this point, with this probability\" and spreads the probability over that disc. A vague fallback (\"elsewhere in this town\", radius 1500 m) therefore does not outrank a verified exact spot (radius 10-20 m) that has somewhat less probability, which is what you want: keep both as separate hypotheses, each with its own radius, rather than inflating or dropping either.\n- Give each hypothesis as a distinct point. Never report the midpoint of two different candidates: theta is convex in distance, so the more probable endpoint always beats the midpoint. Two candidate streets 400 m apart are two hypotheses.\n- Urban is a street-matching problem. The right town but the wrong street is worth under 10%, and 60 m of error already costs more than a third. Precision effort pays here: find the exact stretch of road and pin the spot where the camera stood, on the carriageway, pavement or path. A landmark's centroid, a building's address point or a town's geocoded centre is not where the camera was.\n- non-Urban is a region-finding problem. Anything within about 2 km keeps more than 80% of the points, so once you are confident of the area and your estimated error is around 2 km, further refinement buys almost nothing; spend remaining effort on checking that the region itself is right. Pin countryside that matches the view rather than the nearest town centre.\n- Geocode your own place names. A place name without coordinates is worth nothing to the harness, and having a human turn your place name into a coordinate halves the panorama's score.\n\n# Procedure: coarse to fine\n\n1. Survey. Look at every initial view before settling on any place. Take stock of the evidence by category: language and text, road markings and signs, bollards and guardrails, poles and wires, vehicle plates, architecture and roofs, paving, vegetation and land use, terrain, coast, season and light. The regional playbook at the end of this prompt says what each of these tends to mean.\n2. Hypothesise. Form country, region and municipality hypotheses with probabilities, and identify which observation would separate the leading ones. Call update_candidates within your first two turns, even if all you have is a regional centroid with a large radius; a rough answer on record beats none, and you refine it as you go.\n3. Read text. Zoom with view_crop on anything that might be legible: shop and business names, phone numbers, postcodes, road numbers, kilometre markers, municipal logos on bins and signs, bus-stop names, plates, posters. Request several crops in one turn when you have several targets; the calls are independent and run in parallel. Resolve what you read with search_places and web_search.\n4. Orient. Find the sun (or infer it from shadows), call sun_position, and restate your observations in compass terms: \"sea to the west\", \"the road runs north-east\", \"church tower due south\". Compass bearings are what let you match a candidate against a map or satellite image.\n5. Generate candidates. Use geocoded text where you have it. Where you do not, look for combinations of mapped features with overpass_query (a roundabout next to a church and a fuel station, a line of wind turbines on a ridge above a reservoir, a level crossing beside a silo) inside the region you believe in.\n6. Verify.\n   - Urban: compare orientation-matched street-level views against the panorama, and step along the street until a view matches. When one does, use that imagery's own coordinate, adjusted for where the camera stood if the panorama was clearly taken from the other pavement or from a square. Stop when you have a match or the commit notice arrives.\n   - non-Urban: check field shapes, tracks, tree lines, buildings and distant features against satellite imagery. Stop at roughly 2 km estimated error.\n7. Decide about a question. Ask the operator a multiple-choice question only if the gate described under \"The human channel\" passes. Decide this before your final submission, not after.\n8. Submit. Call submit_locations with your hypotheses, honest probabilities and error radii, and a short reasoning summary naming the decisive evidence.\n\nKeep update_candidates current throughout: call it again whenever your belief moves materially. If the run is cut short for any reason, the last update is what gets submitted.\n\n# Tools\n\n- view_crop renders a rectilinear view from the full-resolution panorama. Yaw is in the panorama's own frame, as marked on the ruler along the top of the overview: 0 at the left edge, increasing to the right, 180 at the centre. It is not a compass bearing until you have oriented the panorama. Pitch is positive above the horizon. The initial views are downscaled, so text that looks like a blur there is often readable at a field of view of 10 to 25 degrees; try enhance for text in shadow or haze. Crops are local and carry no score penalty, so request several at a time. They are not unlimited: every image returned to you (crops, street-level views, aerial tiles) counts against an image budget for the panorama, stated in the task message and reported in the harness status line after each batch of tool results. Once it is spent no further images can be returned, so aim crops at specific targets and keep enough of the budget for street-level and aerial verification.\n- update_candidates records hypotheses and is free and unlimited. submit_locations ends the run.\n- sun_position turns the sun's position in the panorama into a compass heading for yaw 0, and reports how well the sun's elevation fits each candidate. The organisers have not said whether the timestamp is UTC or local time, so the tool evaluates both; treat the heading as good to perhaps 10-15 degrees and the elevation check as a weak prior that can rule out gross errors (wrong side of the Atlantic islands, say) but cannot pick between neighbouring regions.\n- search_places geocodes names. Results are address or feature points, so for Urban panoramas treat them as a starting point for verification rather than as the camera position. Restrict by country codes or a viewbox when you already know the region; an unrestricted search for a common name returns the wrong one more often than the right one.\n- web_search is for resolving what you read: a business name plus a town, a phone number, a festival poster, a company on a van, the route of a named trail. It can open a result page itself when the search results alone do not settle the question.\n- streetview_lookup returns street-level imagery near a point at compass headings you choose, with the imagery's own coordinate and date. Ask for headings that correspond to distinctive directions in the panorama. Coverage is absent on tracks and in fields, and imagery can be years old, so allow for new buildings, repainted facades and changed signage.\n- satellite_tile gives a north-up aerial image with a scale bar. Use it to check road geometry, roundabouts, roof colours, field patterns, tracks, tree lines and coastline against the oriented panorama.\n- overpass_query searches OpenStreetMap for feature combinations. Always bound it with a bounding box or an administrative area; unbounded queries time out. The public servers are slow and shared, so prefer one well-scoped query to several broad ones.\n\nExternal services fail or time out now and then. An error result is information, not a dead end: retry once with a narrower request or use another route to the same fact.\n\n# The human channel\n\nA human operator watches the run. Every interaction with them is penalised on the whole panorama:\n\n| Interaction | Score factor | Worth it only if expected theta rises by more than |\n|---|---|---|\n| One multiple-choice question from you | x0.95 | 5.3% |\n| Three questions | x0.857 | 16.6% |\n| One free-text cue from the operator | x0.8 | 25% |\n| Operator picks the coordinate for a place you named | x0.5 | 100% |\n\nThe only one you control is ask_multiple_choice. The fee is charged when you ask, whether or not an answer arrives, and at most 3 questions are allowed per panorama. Ask only when all of the following hold:\n\n- Your belief is genuinely split between candidates that are far apart on the scoring scale (hundreds of metres or more for Urban, tens of kilometres for non-Urban), and the split is large enough to pay: with a human who answers correctly about 90% of the time, a question pays when 0.855 x (the combined probability of the options you offer) exceeds the probability of your top candidate alone. With a 50 / 30 split that is 0.855 x 0.80 = 0.68 against 0.50: ask. With 80 / 10 it is 0.77 against 0.80: do not.\n- The question is one a human can answer better than you can. The operator has street-level imagery and maps on a second machine but cannot type to you; they can only click one of your options. The useful form is \"which of these candidate places matches the panorama?\", each option naming the place and the visual features to check there. Asking what is visible in the panorama is wasted money: you can already see it.\n- You have exhausted the cheap ways of deciding it yourself.\n\nAsk before you submit or not at all, and offer 2 to 4 options. If the tool reports that questions are unavailable, that costs nothing; carry on alone. If no answer arrives in time, proceed on your own judgement.\n\nThe operator may occasionally send a cue, which arrives as a user message. The rules restrict cues to descriptions of visual features and each one is expensive, so treat it as a pointer to something in the image that deserves a closer look, re-examine that feature yourself, and update your hypotheses.\n\n# Calibration\n\nThe dominant way to lose points in this task is a confident wrong answer: ten slots on a point in the wrong town because one piece of evidence was over-read. Things that have this effect:\n\n- Common names. Rua da Igreja, Calle Mayor, Rue de la Mairie, Café Central, a church dedicated to São Pedro or Notre-Dame exist in hundreds of places. A name is only decisive together with something that narrows it: a postcode, a phone prefix, a municipality logo, a second name nearby. Conversely a rare street or business name is very strong evidence, but check that the geocoder returned that rare name and not a fuzzy match to a common one.\n- Chains and advertising. A national brand says which country; a billboard for a business may stand tens of kilometres from the business; a van's livery says where the company is based, not where it is parked.\n- First impressions. A whitewashed village is not necessarily Andalusia or the Alentejo, and pines by a beach are not necessarily the Landes. Look for the observation that would distinguish your leading hypothesis from the runner-up, and go and get it.\n- A street-level \"match\" on generic features. Similar roundabouts, similar apartment blocks and similar plane-tree avenues are everywhere. A match means several independent specifics agree in the right relative positions and compass directions: this shopfront next to that gate, a pole in front of a particular roofline, a distinctive skyline behind.\n\nEvidence you could not verify should show up as lower probability and a larger radius, not be rounded up. Where you have distinct alternatives, list them separately with their own probabilities. When evidence contradicts your leading hypothesis, weigh it properly rather than explaining it away.\n\nStreet names are seldom readable in these panoramas, and several are off-road, so do not stall waiting for a sign. Landscape, land use, infrastructure and the built environment carry most of the signal, and for non-Urban panoramas they are enough for a good score.\n\n# Working style\n\nTime matters more than tokens: each panorama has a deadline and a limited number of turns, both stated in the task message, and after each batch of tool results the harness reports the time used, the turn number and the images used. Pace the depth of verification to what is left. Batch independent tool calls in the same turn. Keep the text between tool calls to a line or two about what you found and what you are doing next; the detailed evidence belongs in the evidence field of each hypothesis and in the final reasoning summary. When the harness tells you to commit, finish the check in hand and submit. Ending a turn without calling a tool does not submit anything; submit_locations does.\n\n# Regional cue playbook: Portugal, Spain, France and their islands\n\nThis is background knowledge to reason with, not a lookup table. Single cues mislead; agreement between independent cues is what counts. Items marked \"(low confidence)\" are recalled imperfectly: use them only as weak support. All three countries drive on the right and use white road lines, with yellow lines for temporary roadworks layouts.\n\n## Telling the three countries apart\n\nLanguage on signs is the fastest discriminator, then vehicle plates, then road furniture.\n\n- Plates. Portugal: white front and rear, blue EU band on the left; plates issued from 1992 to early 2020 also carry a yellow band on the right with the registration year and month. Formats over time: AA-00-00, 00-00-AA, 00-AA-00 and, since 2020, AA 00 AA without the yellow band. Spain: white front and rear, blue band on the left, four digits then three consonants (0000 BBB) since 2000, with no regional code; older plates start with a one- or two-letter province code (M, B, SE, PO...). France: AA-000-AA with a blue band at both ends, the right-hand one showing a regional logo above a département number; white on newer cars, while many older cars still have a yellow rear plate. The département number on the right band is chosen by the owner but is the local one for most cars, so the numbers on several parked cars are a useful regional prior.\n- Edge lines. France commonly marks the road edge with a broken line of long dashes on rural roads; Spain and Portugal use solid edge lines.\n- Roadside bollards. France: a white post with a red reflective band near the top. Spain: a white post with a black band near the top that holds a vertical orange-yellow reflector on one side and two round white reflectors on the other. Portugal: white posts with a red or orange reflector on one face and white on the other (low confidence on the exact design; do not separate Portugal from Spain on bollards alone).\n- Chevron boards on bends. France: white chevrons on blue. Spain: white on dark blue or black. Portugal: black and yellow (low confidence for all three).\n- Town entry signs. France: white with a red border, the exit sign crossed by a red diagonal. Spain and Portugal: plain white rectangle with black text, the exit sign crossed by a red diagonal.\n- Ice-cream brand with the heart logo: Olá in Portugal, Frigo in Spain, Miko in France. Post: CTT (red) in Portugal, Correos (yellow, crown-and-horn logo) in Spain, La Poste (yellow, blue bird) in France. Tobacco: a red lozenge \"TABAC\" sign in France; a maroon and yellow \"Tabacos\" sign in Spain.\n- Hunting signs on rural fences. Spain: small rectangular plates split diagonally black and white (\"coto privado de caza\"). Portugal: red and white plates for hunting zones (ZCA, ZCT, ZCM, often with a process number that can be looked up). France: \"Chasse gardée\", \"Réserve de chasse\", \"Propriété privée\" text signs.\n- Utility poles. Concrete poles with rows of rectangular recesses or holes occur in all three countries, so they do not discriminate well (low confidence on any finer distinction). Wooden poles are more common in France and in northern Spain than in Portugal (low confidence).\n\n## Portugal\n\nLanguage and vocabulary. Portuguese: ã, õ, ç, lh, nh, endings in -ão, -ões, -eira, -inho. Streets: Rua, Avenida, Travessa, Largo, Praça, Praceta, Estrada, Calçada, Beco, Rotunda. Useful institutional names, each of which names the locality and geocodes well: Junta de Freguesia de X or União das Freguesias de X and Y (parish council), Câmara Municipal de X (municipality; its crest or logo appears on bins, benches, bus shelters and manhole covers), Bombeiros Voluntários de X, Centro de Saúde de X, Escola Básica de X, Santa Casa da Misericórdia de X, Águas de X or SMAS de X on covers. Commercial words: Pastelaria, Talho, Minimercado, Farmácia, Drogaria, Papelaria, Vende-se (for sale), Arrenda-se (to let). Place-name elements: Vila Nova de, Póvoa, Aldeia, Quinta, Casal (Estremadura and the centre), Monte and Herdade (Alentejo estates), Foz, Ribeira, Serra, de Baixo / de Cima; names in Al- cluster in the south (Algarve, Alentejo); names in -ães and -ões are typical of the north.\n\nPostcodes: NNNN-NNN followed by the locality. First digit: 1 Lisbon city; 2 the Lisbon region, Setúbal peninsula, Santarém, Leiria; 3 Coimbra, Aveiro, Viseu; 4 Porto, Braga, Viana do Castelo; 5 Vila Real, Bragança; 6 Castelo Branco, Guarda; 7 Alentejo (Évora, Beja, Portalegre); 8 Algarve; 9 the islands (90xx-93xx Madeira, 95xx-99xx Azores).\n\nPhones: country code +351, nine digits. Mobiles start 91, 92, 93, 96. Landlines start with 2: 21 Lisbon, 22 Porto, 231/239 Coimbra, 232 Viseu, 234 Aveiro, 235 Arganil, 238 Seia, 241 Abrantes, 243 Santarém, 244 Leiria, 245 Portalegre, 249 Torres Novas/Tomar, 251 Valença, 252 Famalicão/Póvoa de Varzim, 253 Braga, 255 Penafiel, 256 São João da Madeira, 258 Viana do Castelo, 259 Vila Real, 261 Torres Vedras, 262 Caldas da Rainha, 263 Vila Franca de Xira, 265 Setúbal, 266 Évora, 268 Estremoz, 269 Santiago do Cacém, 271 Guarda, 272 Castelo Branco, 273 Bragança, 275 Covilhã, 276 Chaves, 278 Mirandela, 281 Tavira, 282 Portimão, 283 Odemira, 284 Beja, 285 Moura, 286 Castro Verde, 289 Faro, 291 Funchal, 292 Horta, 295 Angra do Heroísmo, 296 Ponta Delgada. A landline prefix on a shop sign is a strong sub-regional cue; a mobile number is not.\n\nRoads: A (autoestrada, blue signs, tolled sections marked Portagem), IP (itinerário principal), IC (itinerário complementar), N or EN (estrada nacional), R or ER (regional), M or EM (municipal), CM (caminho municipal). EM and CM numbers are unique only within a municipality. Kilometre posts carry the road number. Cartouche colours for IP and IC numbers are low confidence, so read the number rather than the colour.\n\nStreet furniture and brands. Calçada portuguesa, the mosaic pavement of small white limestone and black basalt cubes, is close to diagnostic for Portugal (mainland and islands). Supermarkets: Pingo Doce, Continente (and Continente Modelo / Bom Dia), Minipreço, Intermarché, Lidl, Auchan, Meu Super, Coviran, Mercadona (in the north and centre, expanding). Fuel: Galp, Prio, Repsol, BP, Cepsa, plus Intermarché and Jumbo/Auchan forecourts. Multibanco \"MB\" cash machines, Jogos Santa Casa lottery signs, Delta, Sical, Nicola and Buondi coffee signs on cafes, Super Bock (stronger in the north) and Sagres (stronger in the centre and south) parasols, a weak cue. Recycling points (ecopontos) are run by regional waste companies whose names are printed on the containers and locate you well: Lipor (Greater Porto), Valorsul (Lisbon and the Oeste), Tratolixo (Cascais, Sintra, Oeiras, Mafra), Amarsul (Setúbal peninsula), Algar (Algarve), ERSUC (Coimbra and Aveiro districts), Valorlis (Leiria), Resitejo (middle Tagus), Braval (Braga), Resulima and Valorminho (Minho), Resinorte (interior north), Suldouro (Gaia, Feira), Gesamb (Évora), Resialentejo (Beja), Ambilital (Alentejo coast), Valnor (Portalegre and Castelo Branco), Resiestrela (Guarda, Covilhã), Planalto Beirão / Ecobeirao (Viseu area) (low confidence on exact service-area boundaries).\n\nArchitecture and landscape by region.\n- Minho and the north-west: green, densely settled and dispersed, granite houses and walls, vines trained high on pergolas and granite posts along field edges (vinho verde), maize, espigueiros (narrow granite granaries on stilts), large tiled \"emigrant\" houses, roadside shrines (alminhas).\n- Douro valley: steep schist terraces of vines, white quinta buildings with painted names, the river deep below.\n- Trás-os-Montes and the interior north: high plateau, granite and schist villages, chestnut, olive and almond, sparse population, cold-climate look.\n- Beira Litoral and the centre-west: eucalyptus and maritime pine plantations almost everywhere, small plots, ribbon development along national roads, tiled facades (azulejo fronts are especially common from Aveiro to Porto); the Aveiro lagoon has striped wooden houses at Costa Nova and salt pans.\n- Beira Interior: granite boulders and broom, the Serra da Estrela massif, schist villages in the Lousã and Açor hills, pine and burnt slopes.\n- Estremadura, Oeste and Ribatejo: rolling limestone hills with windmills, orchards (pear, apple) and vines in the Oeste, market gardens; the flat Tagus floodplain (lezíria) with tomatoes, maize, rice, bulls and horses; white houses with a blue or yellow band.\n- Lisbon and Setúbal: dense tiled and pastel facades, trams and steep cobbled streets in Lisbon, suburbs of apartment blocks; umbrella (stone) pines and sandy soil on the Setúbal peninsula and around Alcácer do Sal; rice fields and storks along the Sado.\n- Alentejo: wide rolling plains, cereal and pasture with scattered cork and holm oaks (montado; cork oaks show stripped rust-red trunks with a painted digit for the harvest year), whitewashed single storey houses with blue or ochre bands and big chimneys, isolated farm estates on low hills, stork nests on pylons, new intensive olive and almond plantations around the Alqueva reservoir. The Alentejo coast has dark cliffs and small coves.\n- Algarve: the coast strip is built up with white villas, lattice chimneys and platibanda parapets; the barrocal behind it is red soil with carob, fig, almond, olive and citrus on limestone; the serra further north is rounded schist hills with cistus and cork. West of Faro the coast is ochre and orange sandstone-limestone cliffs with stacks and grottoes; east of Faro it is lagoon, salt pans and barrier islands (Ria Formosa); the west-facing coast beyond Sagres is high dark cliffs with surf.\n- Atlantic west coast generally: long sandy beaches backed by dunes and pine, strong surf, frequent sea mist.\n\n## Azores and Madeira\n\nSame plates, signs, brands and pavement as mainland Portugal, so the landscape is what separates them.\n- Azores: intensely green pasture divided by black basalt walls and hydrangea hedges (blue flower heads in summer), dairy cattle, Japanese cedar (cryptomeria) plantations, volcanic cones and crater lakes, low white houses with black basalt trim around doors and windows, black lava coast with natural rock pools and few sandy beaches. Pico: vineyards in a grid of tiny black lava-stone enclosures, and the cone of Pico mountain. Terceira: brightly painted small chapels (impérios). São Miguel: tea, pineapple greenhouses, hot springs. Roads are numbered ER with forms like \"ER 1-1a\"; place names include Fajã, Lomba, Canada (a lane), Caldeira, Mosteiros, Ribeira. Postcodes 95xx-99xx.\n- Madeira: very steep terrain with terraces (poios), banana plantations on the south coast below about 200-300 m, vines on low trellises, sugar cane, laurel forest and mist at altitude, heather on the plateau, red-tiled houses scattered up the slopes, many tunnels and viaducts on the VR1 expressway, irrigation channels (levadas). Roads are ER 1xx/2xx and VR/VE. Place names include Lombo, Achada, Fajã, Caminho, Vereda, Estreito. Porto Santo is the opposite: dry, low and sandy with a long beach. Postcodes 90xx-93xx.\n\n## Spain\n\nLanguage and vocabulary. Castilian: ñ, inverted question and exclamation marks, Calle, Avenida, Plaza, Paseo, Carretera, Camino, Travesía, Polígono Industrial, Urbanización; Ayuntamiento de X (town hall), Diputación de X (province, on provincial road signs), Se vende, Se alquila, Farmacia, Ferretería, Estanco, Panadería. The autonomous community's government logo on road and works signs (Junta de Andalucía, Junta de Castilla y León, Xunta de Galicia, Generalitat, Gobierno de Aragón...) tells you the region directly. Co-official languages are a strong regional cue:\n- Catalan (Catalonia, Balearics, and as Valencian in the Valencian Community): Carrer, Avinguda, Plaça, Passeig, Camí, Platja, Ajuntament, Sant, \"Es ven\", \"Es lloga\"; the middle dot in l·l.\n- Galician (Galicia): Rúa, Praza, Estrada, Praia, Concello, Xunta; names with the articles A and O (A Coruña, O Grove), x where Portuguese has j or g. It reads much like Portuguese, so check plates and road signs before deciding the country.\n- Basque (Basque Country, northern Navarre): tx, tz, ts, k and z everywhere; Kalea, Etorbidea, Udala / Udaletxea, Hondartza; bilingual signs.\n- Asturian and Aranese appear locally on bilingual signs.\nPlace-name elements: Villanueva de, Villa-, Castro-, de la Sierra, del Campo, de Arriba / de Abajo; \"de la Frontera\" in Cádiz and Seville provinces; -aga, -eta, -berri, Etxe- in Basque areas; Sant in Catalan areas.\n\nPostcodes: five digits, the first two a province code in roughly alphabetical order: 01 Álava, 02 Albacete, 03 Alicante, 04 Almería, 05 Ávila, 06 Badajoz, 07 Balearics, 08 Barcelona, 09 Burgos, 10 Cáceres, 11 Cádiz, 12 Castellón, 13 Ciudad Real, 14 Córdoba, 15 A Coruña, 16 Cuenca, 17 Girona, 18 Granada, 19 Guadalajara, 20 Gipuzkoa, 21 Huelva, 22 Huesca, 23 Jaén, 24 León, 25 Lleida, 26 La Rioja, 27 Lugo, 28 Madrid, 29 Málaga, 30 Murcia, 31 Navarre, 32 Ourense, 33 Asturias, 34 Palencia, 35 Las Palmas, 36 Pontevedra, 37 Salamanca, 38 Santa Cruz de Tenerife, 39 Cantabria, 40 Segovia, 41 Seville, 42 Soria, 43 Tarragona, 44 Teruel, 45 Toledo, 46 Valencia, 47 Valladolid, 48 Bizkaia, 49 Zamora, 50 Zaragoza, 51 Ceuta, 52 Melilla.\n\nPhones: +34, nine digits. Mobiles start 6 or 7; landlines 9 (or 8) with a provincial prefix: 91 Madrid, 93 Barcelona, 96 Valencia (965/966 Alicante, 964 Castellón), 954/955 Seville, 951/952 Málaga, 956 Cádiz, 957 Córdoba, 958 Granada, 959 Huelva, 950 Almería, 953 Jaén, 944/946 Bizkaia, 943 Gipuzkoa, 945 Álava, 948 Navarre, 941 La Rioja, 942 Cantabria, 984/985 Asturias, 981 A Coruña, 982 Lugo, 986 Pontevedra, 988 Ourense, 987 León, 983 Valladolid, 947 Burgos, 923 Salamanca, 980 Zamora, 979 Palencia, 921 Segovia, 920 Ávila, 975 Soria, 976 Zaragoza, 974 Huesca, 978 Teruel, 972 Girona, 973 Lleida, 977 Tarragona, 971 Balearics, 968 Murcia, 967 Albacete, 969 Cuenca, 949 Guadalajara, 925 Toledo, 926 Ciudad Real, 924 Badajoz, 927 Cáceres, 928 Las Palmas, 922 Santa Cruz de Tenerife.\n\nRoads. Motorways A-nn (autovía, free) and AP-nn (autopista, tolled), white on blue. National roads N-nnn, white on red; the first digit reflects the radial sector from Madrid (N-I to N-VI radials, then N-1xx to N-6xx). Regional roads use a prefix for the community or province with a colour for the tier: orange (first order), green (second), yellow (third / local). Prefixes worth knowing: A- followed by three or four digits is Andalusia (A-92, A-4xx), and Aragón also uses A-; AS Asturias; CA Cantabria (and Cádiz provincial roads); CL Castilla y León; CM Castilla-La Mancha; C- and the province letters B, GI, L, T in Catalonia; CV Valencian Community; EX Extremadura; AG, AC, LU, OU, PO and others in Galicia; M- Madrid; RM Murcia; NA Navarre; LR La Rioja; BI, GI, A in the Basque provinces; Ma- Mallorca, Me- Menorca, EI/PM Ibiza; TF Tenerife, GC Gran Canaria, LZ Lanzarote, FV Fuerteventura, LP La Palma, GM La Gomera, HI El Hierro; two-letter provincial prefixes such as SE, CO, GR, MA, AL, JA, H (Huelva), BA, CC, SA, ZA, LE, BU, VA, SO, SG, AV, TO, CR, AB, CU, GU, TE, Z, HU (Huesca) for provincial networks (low confidence on some of these, and a few prefixes are shared, so confirm with a second cue). Kilometre posts are small plates in the road's colour with the number and kilometre, which pins you to a point on a known road when both are legible.\n\nBrands and furniture. Supermarkets with a regional footprint: Mercadona and Dia (everywhere), Eroski (Basque Country, Navarre, north; also Balearics), BM (Basque Country), Gadis and Froiz (Galicia), Alimerka (Asturias), Lupa (Cantabria), Bonpreu / Esclat, Caprabo and Condis (Catalonia), Consum (Valencia and the east), Mas y Mas, Coviran (Andalusia, from Granada), HiperDino (Canaries only). Fuel: Repsol, Cepsa (rebranding as Moeve), BP, Galp, Petronor (Basque Country), DISA (Canaries). ONCE lottery kiosks, green-cross pharmacies, Guardia Civil barracks (casa cuartel) in villages, bull-shaped Osborne billboards on hilltops beside main roads.\n\nArchitecture and landscape by region.\n- Galicia: green and wet, eucalyptus and pine, granite houses with glazed galleries, slate or tile roofs, long narrow granite hórreos on stilts, dispersed hamlets, drowned river valleys (rias) with mussel rafts.\n- Asturias and Cantabria: lush pasture between mountains and sea, square wooden hórreos on stone pillars (Asturias), houses with wooden balconies, limestone peaks (Picos de Europa), cliffs and small beaches.\n- Basque Country and northern Navarre: steep green valleys, large stone-and-white farmhouses (caseríos) with shallow gabled roofs and red or green timber, dense industrial towns in valley floors.\n- Castilla y León and the northern meseta: vast treeless cereal plains, adobe and brick villages with dovecotes, big sky; pine woods around Segovia and Soria; stone villages in the mountains.\n- Madrid, Castilla-La Mancha: brick apartment blocks; flat red-soil plains of vines, cereal and olives, whitewashed villages, windmills on ridges in La Mancha.\n- Extremadura and western Andalusia: dehesa, open holm and cork oak parkland with pigs and cattle, the same landscape as the Portuguese Alentejo across the border; storks on every tower.\n- Andalusia: endless regimented olive groves (Jaén, Córdoba), white hill villages with iron window grilles, the Guadalquivir plain with cotton, sunflower and citrus, rice near the river mouth, snow on the Sierra Nevada, plastic greenhouses covering the Almería coastal plain, near-desert badlands in Almería, cork and fighting-bull country in Cádiz.\n- Murcia and Alicante: arid, terraced almonds and citrus, palm groves (Elche), irrigation ponds, bare grey-brown mountains.\n- Valencian coast: orange groves on the coastal plain, rice paddies south of Valencia city, high-rise resorts (Benidorm), tiled domes on churches.\n- Aragón and the Ebro valley: semi-arid steppe with gypsum hills (Monegros), irrigated fruit in the valley, wind farms; stone and slate villages in the Pyrenees.\n- Catalonia: stone farmhouses (masies), cork and pine on the rocky Costa Brava, vineyards in Penedès, fruit plains near Lleida, rice in the Ebro delta, Catalan-language signs throughout.\n\n## Canary and Balearic islands\n\n- Canaries: Spanish plates and signs, but volcanic: black or red lava and cinder, almost no rivers, palms, cactus, euphorbia, dragon trees, Canary pine forest at altitude, banana plantations under walls or mesh (north Tenerife, La Palma, Gran Canaria north), white cubic houses with green or blue woodwork and vines in walled pits on black ash (Lanzarote), bare tan hills and long beaches (Fuerteventura), sharp ravines (barrancos), wooden balconies in old towns. Road prefixes TF, GC, LZ, FV, LP, GM, HI. Island councils are called Cabildo de X. Brands: HiperDino, DISA, Binter aircraft. The sun stands noticeably higher than on the mainland for the same date and time.\n- Balearics: Catalan on signs (carrer, camí, platja, cala), dry-stone walls, Aleppo pine, almond, carob and olive, tan sandstone (marès) buildings with green shutters. Mallorca: the Tramuntana range with terraces, old windmills on the central plain, roads Ma-nn. Menorca: low, walled fields with white-topped walls and curved wild-olive wood gates, roads Me-nn. Ibiza and Formentera: white cubic farmhouses, red soil, juniper and pine. Island councils are called Consell Insular.\n\n## France\n\nLanguage and vocabulary. French: é, è, ê, ç and the ligature œ. Streets: Rue, Avenue, Boulevard, Place, Chemin, Impasse, Allée, Route de, Lieu-dit; street-name plates are typically blue enamel with white letters. Mairie, École, Salle des fêtes, La Poste, Boulangerie, Tabac, Presse, Pharmacie, À vendre, À louer. Nearly every commune has a war memorial (monument aux morts), a mairie with a tricolour flag and a named church. Communauté de communes and Conseil départemental logos on signs, bus shelters and road works name the local area or département. Regional place-name elements and languages: Ker-, Plou-, Lan-, Tré-, Pen- and bilingual signs in Brittany; -ville, -bec, -fleur, -tot in Normandy; -heim, -willer, -bach in Alsace; -court and -ghem, -kerque in the north; -ac in the south-west (Dordogne, Charente, Gironde); -argues in Gard and Hérault; -an and -as in Languedoc; Mas de (farmhouse) in Provence and Languedoc; Sant and Catalan doubles in Pyrénées-Orientales; Basque names (Etche-, -enea, x and tz) and bilingual signs in the French Basque Country; Occitan doubles on town signs across the south; -az and -oz in Savoy.\n\nPostcodes: five digits, the first two are the département number (alphabetical when assigned, so 01 Ain ... 13 Bouches-du-Rhône ... 31 Haute-Garonne, 33 Gironde, 34 Hérault, 40 Landes, 64 Pyrénées-Atlantiques, 65 Hautes-Pyrénées, 66 Pyrénées-Orientales, 69 Rhône, 75 Paris, 83 Var, 84 Vaucluse, 06 Alpes-Maritimes, 11 Aude, 30 Gard, 17 Charente-Maritime, 24 Dordogne, 29 Finistère, 35 Ille-et-Vilaine, 44 Loire-Atlantique, 56 Morbihan, 85 Vendée; Corsica uses 20, with 200-201 for the south and 202-206 for the north). The same number appears on plates and on département road signs.\n\nPhones: +33, ten digits written in pairs. 01 Île-de-France, 02 north-west, 03 north-east, 04 south-east (including Corsica), 05 south-west, 06 and 07 mobiles, 09 internet lines. The landline zone is coarse but separates south-west from south-east.\n\nRoads. A (autoroute, white on blue signs, mostly tolled: Péage), N (route nationale, number on red), D (départementale, number on yellow), C (communale, white), M (metropolitan roads, on blue-cyan; low confidence on the colour). D numbers repeat in every département, so a D number needs the département to be useful. Direction signs: blue for motorways, green for major through routes, white for local destinations, yellow for temporary diversions. Kilometre markers are white posts with a red (N) or yellow (D) cap carrying the road number, and small plates marked PR.\n\nBrands and furniture. Supermarkets: Carrefour, E.Leclerc, Intermarché, Super U / Hyper U, Auchan, Casino (strongest in the south-east), Monoprix, Lidl. Fuel: TotalEnergies and supermarket forecourts. PMU and FDJ signs on bars, Crédit Agricole and Caisse d'Épargne branches whose regional names are printed on the sign (Crédit Agricole Pyrénées Gascogne, for example), green-cross pharmacies with animated signs, plane trees lining roads and squares in the south, roundabouts with elaborate centrepieces everywhere.\n\nArchitecture and landscape by region. A rough but reliable rule: steep roofs in slate or flat tile north of a line through the Loire and Lyon, low-pitched roofs of curved terracotta canal tile south of it.\n- Nord and Picardy: red brick terraces, flat beet and wheat fields, slag heaps, belfries.\n- Normandy: half-timbered and brick houses, hedged pasture (bocage) with apple orchards and cows, white chalk cliffs on the Channel coast.\n- Brittany: granite houses, white render with slate roofs and blue shutters, hydrangeas, bocage, a deeply indented rocky coast with large tidal ranges, pink granite in the north, bilingual signs.\n- Loire valley and the centre: pale tuffeau limestone with slate roofs, chateaux, cereal plains in Beauce, forest and ponds in Sologne.\n- Alsace and Lorraine: colourful half-timbered houses with steep tiled roofs and vineyards below the Vosges; storks; stone villages strung along the road in Lorraine.\n- Burgundy, Jura, Alps: glazed-tile roofs and vineyards, wooded limestone plateaux, chalets with broad roofs, high pasture, ski infrastructure.\n- Massif Central: dark volcanic stone, heavy stone-slab or slate roofs, rounded green volcanoes, cattle, emptied villages; limestone plateaux and gorges in the south (Causses, Cévennes).\n- South-west: the Landes is a dead-flat plantation of maritime pine on sand with a straight dune coast and big surf; the Basque Country has white houses with oxblood or green half-timbering and shutters; Dordogne and Lot have honey-coloured limestone and walnut orchards; Gers has rolling sunflower and maize; Bordeaux has endless vineyards with chateau signs.\n- Languedoc and Roussillon: vineyards to the horizon, garrigue scrub, coastal lagoons (étangs) and flat sandy shores, Catalan-flag colours and red-brick-and-pebble walls near Perpignan.\n- Provence and the Côte d'Azur: ochre render, canal-tile roofs, cypress windbreaks, olive groves, lavender on the plateaux, white limestone inlets (calanques) near Marseille, red porphyry of the Esterel, palm-lined corniche towns, the Camargue's flat marsh with white horses and rice.\n\n## Corsica\n\nFrench plates (département 2A or 2B), French road signs, but bilingual place names in French and Corsican, with the French form often painted out or shot through. Corsican names look Italian: endings in -u and -a, \"di\", Santa-, Portu, Corti. Main roads are numbered T (territorial, T10, T20...) since the former N roads were renumbered, alongside D roads (low confidence on current numbering). Granite mountains rising straight from the sea, dense maquis scrub, chestnut forest in the interior, Laricio pine at altitude, cork oak in the south, free-roaming cows and pigs on the road, Genoese watchtowers on headlands, tall grey stone houses in perched villages, white limestone cliffs at the southern tip. Vito fuel stations are common (low confidence).\n\n## Vegetation and land use as a coarse locator\n\n- Eucalyptus plantations: north-west and central Portugal, Galicia and the Cantabrian coast, western Andalusia (Huelva). Essentially absent from France.\n- Cork oak with stripped trunks: Alentejo, Algarve hills, Extremadura, western Andalusia, north-east Catalonia, Corsica, Var.\n- Open oak parkland (montado / dehesa): Alentejo, Extremadura, western Andalusia, Salamanca.\n- Olive monoculture: Andalusia above all, also Alentejo, Trás-os-Montes, Catalonia, Languedoc, Provence. Citrus: Algarve, Valencia, Murcia, Andalusia, Corsica's east coast.\n- Maritime pine on sand: the Portuguese coast (Leiria), the Landes. Umbrella pine: Setúbal peninsula, Alentejo coast, Huelva, Valladolid, the French and Spanish Mediterranean coasts.\n- High-trained vines on pergolas: Minho, Galicia. Low bush vines on bare soil: La Mancha, Languedoc, Alentejo. Vines on wires in neat rows with rose bushes and chateau signs: Bordeaux, Burgundy.\n- Maize with pasture and hedges: Atlantic climates (Minho, Galicia, Basque Country, south-west France, Brittany). Sunflowers: Andalusia, Castile, south-west France. Rice: Sado, Tagus and Mondego estuaries, Guadalquivir marshes, Valencia Albufera, Ebro delta, Camargue.\n- Palms, agaves and prickly pear suggest the frost-free south and the islands; beech, hedgerows and lush verges in midsummer suggest the Atlantic north or mountains.\n- Season check against the timestamp: summer-brown grass is normal in the Mediterranean south and unusual on the Atlantic north coast and in the Azores, which stay green.\n\n## Coasts\n\n- Sea to the west with heavy surf, dunes and mist: the Portuguese west coast, Galicia's outer coast, the Landes and Vendée. Sea to the south with calm water: Algarve, Andalusia, the French Mediterranean. Sea to the north with green cliffs: Asturias, Cantabria, the Basque coast, Brittany's north, Normandy. Sea to the east: Valencia, Catalonia, Corsica's east plain. On islands every direction occurs, which is one reason to orient with the sun before reasoning from the coast.\n- Tidal flats, oyster farms and a large tidal range point to the Atlantic or Channel; a narrow tide line and beach bars point to the Mediterranean.\n- Cliff colour and rock: white chalk (Normandy), pink or grey granite (Brittany, Galicia, Corsica), ochre-orange sandstone and limestone (central Algarve), dark schist (south-west Portugal), black lava (Azores, Canaries, Madeira), white limestone (Marseille calanques, Balearics, southern Corsica), red porphyry (Esterel).\n\n# In short\n\nRead the scene carefully, keep an honest answer on record from the first turns, verify before you trust, pin where the camera stood, and submit hypotheses whose probabilities you would bet on.\n",
         "tools": [
           {
+            "type": "function",
             "name": "view_crop",
             "description": "Render a rectilinear view of the panorama at native resolution. Use it to zoom on signs, plates, shopfronts, road markings, poles and distant landmarks. yaw is in degrees clockwise from the left edge of the overview ruler (0-360, the panorama's own frame, not compass north); pitch is degrees above (+) or below (-) the horizon; fov is the horizontal field of view in degrees (5-120). Narrow fields of view (< 30) are upscaled for legibility. Free.",
-            "input_schema": {
+            "parameters": {
               "type": "object",
               "properties": {
                 "yaw": {
@@ -138,9 +133,10 @@
             "strict": true
           },
           {
+            "type": "function",
             "name": "update_candidates",
             "description": "Record your current location hypotheses. Free and unlimited: call it within your first two turns and again whenever your belief changes. The harness keeps the latest call as the best-so-far answer and submits it if you run out of time, so never leave it stale.",
-            "input_schema": {
+            "parameters": {
               "type": "object",
               "properties": {
                 "hypotheses": {
@@ -194,9 +190,10 @@
             "strict": true
           },
           {
+            "type": "function",
             "name": "submit_locations",
             "description": "Submit your final hypotheses and end the run. The harness, not you, turns them into the ranked 10-entry list. Give honest probabilities and error radii.",
-            "input_schema": {
+            "parameters": {
               "type": "object",
               "properties": {
                 "hypotheses": {
@@ -254,9 +251,10 @@
             "strict": true
           },
           {
+            "type": "function",
             "name": "sun_position",
             "description": "Given where the sun appears in the panorama (sun_yaw and sun_pitch in the panorama's own frame, as used by view_crop) and candidate coordinates, return for each candidate the compass heading of panorama yaw 0 and the mismatch between observed and expected sun elevation. Evaluated for the timestamp read as UTC and as local time; treat the result as a weak prior.",
-            "input_schema": {
+            "parameters": {
               "type": "object",
               "properties": {
                 "sun_yaw": {
@@ -295,9 +293,10 @@
             "strict": true
           },
           {
+            "type": "function",
             "name": "ask_multiple_choice",
             "description": "Ask the human operator ONE multiple-choice question. Costs x0.95 on this panorama's whole score the moment you ask, answered or not. The operator cannot type: they click one of your options. Only ask when your posterior is truly multi-modal between far-apart candidates and a human with street-level tools on another machine could tell them apart; describe each option by checkable visual features. Never ask what is visible in the panorama. Returns an error at no cost if questions are disabled or the limit is reached.",
-            "input_schema": {
+            "parameters": {
               "type": "object",
               "properties": {
                 "question": {
@@ -325,9 +324,10 @@
             "strict": true
           },
           {
+            "type": "function",
             "name": "search_places",
             "description": "Geocode a place name, business, street or address to coordinates (OpenStreetMap Nominatim, then Photon; Google if configured). Use it for names read off signs and for your own place names. countrycodes is a comma-separated list of ISO 3166-1 alpha-2 codes such as 'pt,es,fr' (empty string for no restriction). viewbox is 'min_lng,min_lat,max_lng,max_lat' to restrict results to a box (empty string for none).",
-            "input_schema": {
+            "parameters": {
               "type": "object",
               "properties": {
                 "query": {
@@ -350,9 +350,10 @@
             "strict": true
           },
           {
+            "type": "function",
             "name": "streetview_lookup",
             "description": "Find street-level imagery near a coordinate and return views at the given compass headings, plus the imagery's own exact coordinate and capture date. Compare with the panorama to verify a candidate; when a view matches, the answer is the returned pano coordinate. headings are compass degrees (0 = north), at most 4; each heading returns one image that counts against the image budget, so ask for the one or two directions that are distinctive in the panorama (an empty list gives north and south).",
-            "input_schema": {
+            "parameters": {
               "type": "object",
               "properties": {
                 "lat": {
@@ -383,9 +384,10 @@
             "strict": true
           },
           {
+            "type": "function",
             "name": "satellite_tile",
             "description": "Aerial image centred on a coordinate, north up, with a scale bar. zoom is a web-map zoom level (10 = region, 14 = town, 17 = street, 19 = building). Use it for road layout, roundabouts, roofs, field patterns, tracks and coastline.",
-            "input_schema": {
+            "parameters": {
               "type": "object",
               "properties": {
                 "lat": {
@@ -408,9 +410,10 @@
             "strict": true
           },
           {
+            "type": "function",
             "name": "overpass_query",
             "description": "Run an Overpass QL query against OpenStreetMap to find feature combinations (e.g. a church within 200 m of a roundabout, wind turbines, masts, reservoirs). Always scope the query to a bounding box or an area such as area[\"ISO3166-2\"=\"PT-11\"]; country-wide regex queries time out. Use [out:json][timeout:25]; and 'out center 50;' to keep results small.",
-            "input_schema": {
+            "parameters": {
               "type": "object",
               "properties": {
                 "ql": {
@@ -425,17 +428,13 @@
             "strict": true
           },
           {
-            "type": "web_search_20260209",
-            "name": "web_search",
-            "max_uses": 20
-          },
-          {
-            "type": "web_fetch_20260209",
-            "name": "web_fetch",
-            "max_uses": 10
+            "type": "web_search",
+            "user_location": {
+              "type": "approximate"
+            }
           }
         ],
-        "git_sha": "0d464c775f33ce0184f6d43e6e7445a8046e6424",
+        "git_sha": "976008e06b2a240c8aa446875b0b0d1f5bd60b01",
         "flags": {
           "allow_web": true,
           "no_human": false,
@@ -449,8 +448,8 @@
     {
       "schema_version": "1.0",
       "seq": 2,
-      "ts": "2026-10-10T14:36:43.746Z",
-      "t_rel_s": 0.254,
+      "ts": "2026-10-10T16:25:01.315Z",
+      "t_rel_s": 0.322,
       "run_id": "e2e",
       "panorama_id": "pano_a",
       "actor": "harness",
@@ -472,7 +471,7 @@
             "content": [
               {
                 "type": "text",
-                "text": "Panorama pano_a.\nLabel: Urban. Urban scoring applies: theta = 2 / (1 + d / 100 m). Being 100 m off halves the score and 1 km off leaves 9%, so the goal is the exact stretch of street and the spot where the camera stood.\nCapture timestamp: 2026-10-11 09:30:00 (raw 20261011093000; time zone not stated, could be UTC or local).\nBudget: the harness asks you to commit after 15 min and stops the run at 20 min, using your latest recorded hypotheses; at most 45 turns. Image budget: 100 images for the whole conversation, including the initial views below.\nThis is the Special One: its score counts triple, so it deserves your most careful verification, and a question to the operator is more likely to be worth its fee here if the gate passes.\nMultiple-choice questions to the operator are available for this panorama, subject to the gate.\nThe views follow, each preceded by its label. Yaw values are in the panorama's own frame (0 at the left edge of the overview), not compass bearings."
+                "text": "Panorama pano_a.\nLabel: Urban. Urban scoring applies: theta = 2 / (1 + d / 100 m). Being 100 m off halves the score and 1 km off leaves 9%, so the goal is the exact stretch of street and the spot where the camera stood.\nCapture timestamp: 2026-10-11 09:30:00 (raw 20261011093000; time zone not stated, could be UTC or local).\nBudget: the harness asks you to commit after 15 min and stops the run at 20 min, using your latest recorded hypotheses; at most 45 turns. Image budget: 80 images for the whole conversation, including the initial views below.\nThis is the Special One: its score counts triple, so it deserves your most careful verification, and a question to the operator is more likely to be worth its fee here if the gate passes.\nMultiple-choice questions to the operator are available for this panorama, subject to the gate.\nThe views follow, each preceded by its label. Yaw values are in the panorama's own frame (0 at the left edge of the overview), not compass bearings."
               },
               {
                 "type": "text",
@@ -618,8 +617,8 @@
     {
       "schema_version": "1.0",
       "seq": 3,
-      "ts": "2026-10-10T14:36:43.748Z",
-      "t_rel_s": 0.256,
+      "ts": "2026-10-10T16:25:01.318Z",
+      "t_rel_s": 0.325,
       "run_id": "e2e",
       "panorama_id": "pano_a",
       "actor": "agent",
@@ -632,19 +631,18 @@
       },
       "data": {
         "turn": 1,
-        "id": "msg_fixture",
-        "model": "claude-opus-5-5",
+        "id": "resp_fixture",
+        "model": "gpt-6.1-sol",
         "stop_reason": "tool_use",
         "stop_details": null,
         "content": [
           {
             "type": "thinking",
-            "thinking": "Scripted test fixture. Two candidate cities; zoom on the shop sign first.",
-            "signature": "sig-fixture"
+            "thinking": "Scripted test fixture. Two candidate cities; zoom on the shop sign first."
           },
           {
             "type": "tool_use",
-            "id": "toolu_a1",
+            "id": "call_a1",
             "name": "view_crop",
             "input": {
               "yaw": 350.0,
@@ -655,7 +653,7 @@
           },
           {
             "type": "tool_use",
-            "id": "toolu_a2",
+            "id": "call_a2",
             "name": "update_candidates",
             "input": {
               "hypotheses": [
@@ -680,22 +678,22 @@
           }
         ],
         "usage": {
-          "input_tokens": 4000,
+          "input_tokens": 24000,
+          "cached_input_tokens": 20000,
+          "cache_write_tokens": 0,
           "output_tokens": 300,
-          "cache_creation_input_tokens": 0,
-          "cache_read_input_tokens": 20000,
-          "web_search_requests": 0,
-          "web_fetch_requests": 0
+          "reasoning_tokens": 120,
+          "web_search_requests": 0
         },
-        "cost_usd": 0.026,
+        "cost_usd": 0.013,
         "latency_ms": 2
       }
     },
     {
       "schema_version": "1.0",
       "seq": 4,
-      "ts": "2026-10-10T14:36:43.748Z",
-      "t_rel_s": 0.257,
+      "ts": "2026-10-10T16:25:01.318Z",
+      "t_rel_s": 0.325,
       "run_id": "e2e",
       "panorama_id": "pano_a",
       "actor": "agent",
@@ -708,7 +706,7 @@
       },
       "data": {
         "tool": "view_crop",
-        "tool_use_id": "toolu_a1",
+        "tool_use_id": "call_a1",
         "input": {
           "yaw": 350.0,
           "pitch": 5.0,
@@ -720,8 +718,8 @@
     {
       "schema_version": "1.0",
       "seq": 5,
-      "ts": "2026-10-10T14:36:43.749Z",
-      "t_rel_s": 0.257,
+      "ts": "2026-10-10T16:25:01.318Z",
+      "t_rel_s": 0.325,
       "run_id": "e2e",
       "panorama_id": "pano_a",
       "actor": "agent",
@@ -734,7 +732,7 @@
       },
       "data": {
         "tool": "update_candidates",
-        "tool_use_id": "toolu_a2",
+        "tool_use_id": "call_a2",
         "input": {
           "hypotheses": [
             {
@@ -760,8 +758,8 @@
     {
       "schema_version": "1.0",
       "seq": 6,
-      "ts": "2026-10-10T14:36:43.749Z",
-      "t_rel_s": 0.257,
+      "ts": "2026-10-10T16:25:01.319Z",
+      "t_rel_s": 0.325,
       "run_id": "e2e",
       "panorama_id": "pano_a",
       "actor": "agent",
@@ -875,8 +873,8 @@
     {
       "schema_version": "1.0",
       "seq": 7,
-      "ts": "2026-10-10T14:36:43.749Z",
-      "t_rel_s": 0.258,
+      "ts": "2026-10-10T16:25:01.319Z",
+      "t_rel_s": 0.326,
       "run_id": "e2e",
       "panorama_id": "pano_a",
       "actor": "tool",
@@ -889,9 +887,9 @@
       },
       "data": {
         "tool": "update_candidates",
-        "tool_use_id": "toolu_a2",
+        "tool_use_id": "call_a2",
         "is_error": false,
-        "duration_ms": 1,
+        "duration_ms": 0,
         "output": "Recorded 2 hypotheses. Best-so-far answer held by the harness: 10 x (38.713909, -9.133476). Current score multiplier: x1.",
         "urls": [],
         "log": {
@@ -979,8 +977,8 @@
     {
       "schema_version": "1.0",
       "seq": 8,
-      "ts": "2026-10-10T14:36:43.762Z",
-      "t_rel_s": 0.27,
+      "ts": "2026-10-10T16:25:01.330Z",
+      "t_rel_s": 0.337,
       "run_id": "e2e",
       "panorama_id": "pano_a",
       "actor": "tool",
@@ -993,9 +991,9 @@
       },
       "data": {
         "tool": "view_crop",
-        "tool_use_id": "toolu_a1",
+        "tool_use_id": "call_a1",
         "is_error": false,
-        "duration_ms": 14,
+        "duration_ms": 12,
         "output": "View centred on yaw 350.0, pitch +5.0; horizontal fov 20.0; 512 x 512 px.\nThe centre row spans yaw 340.0 (left edge) to 0.0 (right edge); the centre column spans pitch -5.0 to +15.0.\nShown at 8.9x the panorama's native resolution: a narrower fov will not reveal more detail.\n[image]",
         "urls": [],
         "log": {
@@ -1017,8 +1015,8 @@
     {
       "schema_version": "1.0",
       "seq": 9,
-      "ts": "2026-10-10T14:36:43.762Z",
-      "t_rel_s": 0.271,
+      "ts": "2026-10-10T16:25:01.330Z",
+      "t_rel_s": 0.337,
       "run_id": "e2e",
       "panorama_id": "pano_a",
       "actor": "harness",
@@ -1040,7 +1038,7 @@
             "content": [
               {
                 "type": "tool_result",
-                "tool_use_id": "toolu_a1",
+                "tool_use_id": "call_a1",
                 "content": [
                   {
                     "type": "text",
@@ -1058,7 +1056,7 @@
               },
               {
                 "type": "tool_result",
-                "tool_use_id": "toolu_a2",
+                "tool_use_id": "call_a2",
                 "content": [
                   {
                     "type": "text",
@@ -1068,7 +1066,7 @@
               },
               {
                 "type": "text",
-                "text": "Harness status: 0 s elapsed, 15 min until you are asked to commit; turn 1 of 45 done; image budget used 12 of 100."
+                "text": "Harness status: 0 s elapsed, 15 min until you are asked to commit; turn 1 of 45 done; image budget used 12 of 80."
               }
             ]
           }
@@ -1078,8 +1076,8 @@
     {
       "schema_version": "1.0",
       "seq": 10,
-      "ts": "2026-10-10T14:36:43.765Z",
-      "t_rel_s": 0.273,
+      "ts": "2026-10-10T16:25:01.332Z",
+      "t_rel_s": 0.339,
       "run_id": "e2e",
       "panorama_id": "pano_a",
       "actor": "agent",
@@ -1092,14 +1090,14 @@
       },
       "data": {
         "turn": 2,
-        "id": "msg_fixture",
-        "model": "claude-opus-5-5",
+        "id": "resp_fixture",
+        "model": "gpt-6.1-sol",
         "stop_reason": "tool_use",
         "stop_details": null,
         "content": [
           {
             "type": "tool_use",
-            "id": "toolu_a3",
+            "id": "call_a3",
             "name": "search_places",
             "input": {
               "query": "Pastelaria Santo António",
@@ -1109,22 +1107,22 @@
           }
         ],
         "usage": {
-          "input_tokens": 4000,
+          "input_tokens": 24000,
+          "cached_input_tokens": 20000,
+          "cache_write_tokens": 0,
           "output_tokens": 300,
-          "cache_creation_input_tokens": 0,
-          "cache_read_input_tokens": 20000,
-          "web_search_requests": 0,
-          "web_fetch_requests": 0
+          "reasoning_tokens": 120,
+          "web_search_requests": 0
         },
-        "cost_usd": 0.026,
+        "cost_usd": 0.013,
         "latency_ms": 2
       }
     },
     {
       "schema_version": "1.0",
       "seq": 11,
-      "ts": "2026-10-10T14:36:43.765Z",
-      "t_rel_s": 0.273,
+      "ts": "2026-10-10T16:25:01.333Z",
+      "t_rel_s": 0.339,
       "run_id": "e2e",
       "panorama_id": "pano_a",
       "actor": "agent",
@@ -1137,7 +1135,7 @@
       },
       "data": {
         "tool": "search_places",
-        "tool_use_id": "toolu_a3",
+        "tool_use_id": "call_a3",
         "input": {
           "query": "Pastelaria Santo António",
           "countrycodes": "pt",
@@ -1148,8 +1146,8 @@
     {
       "schema_version": "1.0",
       "seq": 12,
-      "ts": "2026-10-10T14:36:44.440Z",
-      "t_rel_s": 0.948,
+      "ts": "2026-10-10T16:25:02.932Z",
+      "t_rel_s": 1.939,
       "run_id": "e2e",
       "panorama_id": "pano_a",
       "actor": "tool",
@@ -1162,9 +1160,9 @@
       },
       "data": {
         "tool": "search_places",
-        "tool_use_id": "toolu_a3",
+        "tool_use_id": "call_a3",
         "is_error": false,
-        "duration_ms": 675,
+        "duration_ms": 1599,
         "output": "1 result(s) for 'Pastelaria Santo António', countries pt (name | type | lat,lng | location | source):\n1. Pastelaria Santo António | amenity/cafe | 38.713909,-9.133476 | Rua do Milagre de Santo António, Lisboa, Portugal | source: nominatim",
         "urls": [
           "https://nominatim.openstreetmap.org/search?q=Pastelaria+Santo+Ant%C3%B3nio&format=jsonv2&addressdetails=1&limit=8&countrycodes=pt"
@@ -1200,8 +1198,8 @@
     {
       "schema_version": "1.0",
       "seq": 13,
-      "ts": "2026-10-10T14:36:44.441Z",
-      "t_rel_s": 0.949,
+      "ts": "2026-10-10T16:25:02.933Z",
+      "t_rel_s": 1.94,
       "run_id": "e2e",
       "panorama_id": "pano_a",
       "actor": "harness",
@@ -1223,7 +1221,7 @@
             "content": [
               {
                 "type": "tool_result",
-                "tool_use_id": "toolu_a3",
+                "tool_use_id": "call_a3",
                 "content": [
                   {
                     "type": "text",
@@ -1233,7 +1231,7 @@
               },
               {
                 "type": "text",
-                "text": "Harness status: 1 s elapsed, 14 min 59 s until you are asked to commit; turn 2 of 45 done; image budget used 12 of 100."
+                "text": "Harness status: 2 s elapsed, 14 min 58 s until you are asked to commit; turn 2 of 45 done; image budget used 12 of 80."
               }
             ]
           }
@@ -1243,8 +1241,8 @@
     {
       "schema_version": "1.0",
       "seq": 14,
-      "ts": "2026-10-10T14:36:44.447Z",
-      "t_rel_s": 0.956,
+      "ts": "2026-10-10T16:25:02.939Z",
+      "t_rel_s": 1.946,
       "run_id": "e2e",
       "panorama_id": "pano_a",
       "actor": "agent",
@@ -1257,14 +1255,14 @@
       },
       "data": {
         "turn": 3,
-        "id": "msg_fixture",
-        "model": "claude-opus-5-5",
+        "id": "resp_fixture",
+        "model": "gpt-6.1-sol",
         "stop_reason": "tool_use",
         "stop_details": null,
         "content": [
           {
             "type": "tool_use",
-            "id": "toolu_a4",
+            "id": "call_a4",
             "name": "ask_multiple_choice",
             "input": {
               "question": "Which street-level view matches the panorama?",
@@ -1277,22 +1275,22 @@
           }
         ],
         "usage": {
-          "input_tokens": 4000,
+          "input_tokens": 24000,
+          "cached_input_tokens": 20000,
+          "cache_write_tokens": 0,
           "output_tokens": 300,
-          "cache_creation_input_tokens": 0,
-          "cache_read_input_tokens": 20000,
-          "web_search_requests": 0,
-          "web_fetch_requests": 0
+          "reasoning_tokens": 120,
+          "web_search_requests": 0
         },
-        "cost_usd": 0.026,
+        "cost_usd": 0.013,
         "latency_ms": 6
       }
     },
     {
       "schema_version": "1.0",
       "seq": 15,
-      "ts": "2026-10-10T14:36:44.448Z",
-      "t_rel_s": 0.956,
+      "ts": "2026-10-10T16:25:02.940Z",
+      "t_rel_s": 1.947,
       "run_id": "e2e",
       "panorama_id": "pano_a",
       "actor": "agent",
@@ -1305,7 +1303,7 @@
       },
       "data": {
         "tool": "ask_multiple_choice",
-        "tool_use_id": "toolu_a4",
+        "tool_use_id": "call_a4",
         "input": {
           "question": "Which street-level view matches the panorama?",
           "options": [
@@ -1319,8 +1317,8 @@
     {
       "schema_version": "1.0",
       "seq": 16,
-      "ts": "2026-10-10T14:36:44.449Z",
-      "t_rel_s": 0.957,
+      "ts": "2026-10-10T16:25:02.940Z",
+      "t_rel_s": 1.947,
       "run_id": "e2e",
       "panorama_id": "pano_a",
       "actor": "agent",
@@ -1339,7 +1337,7 @@
           "Wide granite quay on a river"
         ],
         "why_it_matters": "Option 1 confirms the first hypothesis, option 2 the second.",
-        "asked_at": "2026-10-10T14:36:44.448Z",
+        "asked_at": "2026-10-10T16:25:02.940Z",
         "multiplier_before": 1.0,
         "multiplier_after": 0.95,
         "gate": {
@@ -1351,8 +1349,8 @@
     {
       "schema_version": "1.0",
       "seq": 17,
-      "ts": "2026-10-10T14:36:44.452Z",
-      "t_rel_s": 0.96,
+      "ts": "2026-10-10T16:25:02.944Z",
+      "t_rel_s": 1.951,
       "run_id": "e2e",
       "panorama_id": "pano_a",
       "actor": "human",
@@ -1380,8 +1378,8 @@
     {
       "schema_version": "1.0",
       "seq": 18,
-      "ts": "2026-10-10T14:36:44.452Z",
-      "t_rel_s": 0.96,
+      "ts": "2026-10-10T16:25:02.944Z",
+      "t_rel_s": 1.951,
       "run_id": "e2e",
       "panorama_id": "pano_a",
       "actor": "tool",
@@ -1394,7 +1392,7 @@
       },
       "data": {
         "tool": "ask_multiple_choice",
-        "tool_use_id": "toolu_a4",
+        "tool_use_id": "call_a4",
         "is_error": false,
         "duration_ms": 4,
         "output": "The operator chose option 1: 'Narrow lane with tram rails and a blue-tiled cafe'. Treat the click as about 90% reliable. Score multiplier is now x0.95; 2 question(s) left.",
@@ -1415,8 +1413,8 @@
     {
       "schema_version": "1.0",
       "seq": 19,
-      "ts": "2026-10-10T14:36:44.452Z",
-      "t_rel_s": 0.961,
+      "ts": "2026-10-10T16:25:02.944Z",
+      "t_rel_s": 1.951,
       "run_id": "e2e",
       "panorama_id": "pano_a",
       "actor": "harness",
@@ -1438,7 +1436,7 @@
             "content": [
               {
                 "type": "tool_result",
-                "tool_use_id": "toolu_a4",
+                "tool_use_id": "call_a4",
                 "content": [
                   {
                     "type": "text",
@@ -1448,7 +1446,7 @@
               },
               {
                 "type": "text",
-                "text": "Harness status: 1 s elapsed, 14 min 59 s until you are asked to commit; turn 3 of 45 done; image budget used 12 of 100."
+                "text": "Harness status: 2 s elapsed, 14 min 58 s until you are asked to commit; turn 3 of 45 done; image budget used 12 of 80."
               }
             ]
           }
@@ -1458,8 +1456,8 @@
     {
       "schema_version": "1.0",
       "seq": 20,
-      "ts": "2026-10-10T14:36:44.456Z",
-      "t_rel_s": 0.964,
+      "ts": "2026-10-10T16:25:02.948Z",
+      "t_rel_s": 1.955,
       "run_id": "e2e",
       "panorama_id": "pano_a",
       "actor": "agent",
@@ -1472,14 +1470,14 @@
       },
       "data": {
         "turn": 4,
-        "id": "msg_fixture",
-        "model": "claude-opus-5-5",
+        "id": "resp_fixture",
+        "model": "gpt-6.1-sol",
         "stop_reason": "tool_use",
         "stop_details": null,
         "content": [
           {
             "type": "tool_use",
-            "id": "toolu_a5",
+            "id": "call_a5",
             "name": "submit_locations",
             "input": {
               "hypotheses": [
@@ -1505,22 +1503,22 @@
           }
         ],
         "usage": {
-          "input_tokens": 4000,
+          "input_tokens": 24000,
+          "cached_input_tokens": 20000,
+          "cache_write_tokens": 0,
           "output_tokens": 300,
-          "cache_creation_input_tokens": 0,
-          "cache_read_input_tokens": 20000,
-          "web_search_requests": 0,
-          "web_fetch_requests": 0
+          "reasoning_tokens": 120,
+          "web_search_requests": 0
         },
-        "cost_usd": 0.026,
+        "cost_usd": 0.013,
         "latency_ms": 3
       }
     },
     {
       "schema_version": "1.0",
       "seq": 21,
-      "ts": "2026-10-10T14:36:44.456Z",
-      "t_rel_s": 0.965,
+      "ts": "2026-10-10T16:25:02.948Z",
+      "t_rel_s": 1.955,
       "run_id": "e2e",
       "panorama_id": "pano_a",
       "actor": "agent",
@@ -1533,7 +1531,7 @@
       },
       "data": {
         "tool": "submit_locations",
-        "tool_use_id": "toolu_a5",
+        "tool_use_id": "call_a5",
         "input": {
           "hypotheses": [
             {
@@ -1560,8 +1558,8 @@
     {
       "schema_version": "1.0",
       "seq": 22,
-      "ts": "2026-10-10T14:36:44.457Z",
-      "t_rel_s": 0.965,
+      "ts": "2026-10-10T16:25:02.949Z",
+      "t_rel_s": 1.956,
       "run_id": "e2e",
       "panorama_id": "pano_a",
       "actor": "harness",
@@ -1678,8 +1676,8 @@
     {
       "schema_version": "1.0",
       "seq": 23,
-      "ts": "2026-10-10T14:36:44.458Z",
-      "t_rel_s": 0.966,
+      "ts": "2026-10-10T16:25:02.950Z",
+      "t_rel_s": 1.956,
       "run_id": "e2e",
       "panorama_id": "pano_a",
       "actor": "tool",
@@ -1692,7 +1690,7 @@
       },
       "data": {
         "tool": "submit_locations",
-        "tool_use_id": "toolu_a5",
+        "tool_use_id": "call_a5",
         "is_error": false,
         "duration_ms": 1,
         "output": "Final answer recorded: 10 x (38.713909, -9.133476). The run is complete.",
@@ -1782,8 +1780,8 @@
     {
       "schema_version": "1.0",
       "seq": 24,
-      "ts": "2026-10-10T14:36:44.458Z",
-      "t_rel_s": 0.966,
+      "ts": "2026-10-10T16:25:02.950Z",
+      "t_rel_s": 1.957,
       "run_id": "e2e",
       "panorama_id": "pano_a",
       "actor": "harness",
@@ -1798,15 +1796,15 @@
         "stop_reason": "submitted",
         "turns": 4,
         "tokens": {
-          "input_tokens": 16000,
+          "input_tokens": 96000,
+          "cached_input_tokens": 80000,
+          "cache_write_tokens": 0,
           "output_tokens": 1200,
-          "cache_creation_input_tokens": 0,
-          "cache_read_input_tokens": 80000,
-          "web_search_requests": 0,
-          "web_fetch_requests": 0
+          "reasoning_tokens": 480,
+          "web_search_requests": 0
         },
-        "cost_usd": 0.104,
-        "wall_time_s": 0.966,
+        "cost_usd": 0.052,
+        "wall_time_s": 1.957,
         "final_origin": "agent"
       }
     }
@@ -1895,15 +1893,15 @@
     "stop_reason": "submitted",
     "turns": 4,
     "tokens": {
-      "input_tokens": 16000,
+      "input_tokens": 96000,
+      "cached_input_tokens": 80000,
+      "cache_write_tokens": 0,
       "output_tokens": 1200,
-      "cache_creation_input_tokens": 0,
-      "cache_read_input_tokens": 80000,
-      "web_search_requests": 0,
-      "web_fetch_requests": 0
+      "reasoning_tokens": 480,
+      "web_search_requests": 0
     },
-    "cost_usd": 0.104,
-    "wall_time_s": 0.966,
+    "cost_usd": 0.052,
+    "wall_time_s": 1.957,
     "final_origin": "agent"
   }
 }

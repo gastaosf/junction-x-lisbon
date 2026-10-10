@@ -79,9 +79,10 @@ def _print_summary(rows: list[dict[str, Any]], paths: list[Path]) -> None:
 
 def _warn_if_no_key() -> None:
     # load_settings() has already read .env, so the environment is complete here.
-    if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
+    # OPENAI_ADMIN_KEY alone would satisfy the SDK's constructor, but it is not a model-calling key.
+    if not os.environ.get("OPENAI_API_KEY"):
         typer.echo(
-            "warning: ANTHROPIC_API_KEY is not set; every panorama will get the harness fallback answer "
+            "warning: OPENAI_API_KEY is not set; every panorama will get the harness fallback answer "
             "(the label's prior point) and an api_error event.",
             err=True,
         )

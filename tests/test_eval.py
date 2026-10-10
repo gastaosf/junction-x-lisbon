@@ -394,17 +394,28 @@ async def test_disable_tools_removes_definitions_and_handlers(tool_tables: types
     untouched = tool_tables.HANDLERS["view_crop"]
     assert run_eval.disable_tools(["satellite_tile", " web_search", ""]) == ["satellite_tile", "web_search"]
 
-    names = [tool["name"] for tool in schemas.tool_definitions(Settings())]
+    tools = schemas.tool_definitions(Settings())
+    names = [tool.get("name") or tool["type"] for tool in tools]
     assert "satellite_tile" not in names and "web_search" not in names
-    assert {"view_crop", "streetview_lookup", "web_fetch", "submit_locations"} <= set(names)
+    assert {"view_crop", "streetview_lookup", "submit_locations"} <= set(names)
+    assert all(tool["type"] == "function" for tool in tools)  # the only hosted tool is the one switched off
     assert tool_tables.HANDLERS["view_crop"] is untouched
     result = await tool_tables.HANDLERS["satellite_tile"](None, {})
     assert result.is_error
 
 
+def test_disable_tools_leaves_hosted_tools_alone_unless_named(tool_tables: types.ModuleType) -> None:
+    from geoagent.config import Settings
+
+    assert run_eval.disable_tools(["satellite_tile"]) == ["satellite_tile"]
+    assert schemas.tool_definitions(Settings())[-1]["type"] == "web_search"
+
+
 def test_disable_tools_rejects_unknown_and_protected(tool_tables: types.ModuleType) -> None:
     with pytest.raises(ValueError, match="unknown tools: teleport"):
         run_eval.disable_tools(["teleport"])
+    with pytest.raises(ValueError, match="unknown tools: open_page"):
+        run_eval.disable_tools(["open_page"])
     with pytest.raises(ValueError, match="submit_locations"):
         run_eval.disable_tools(["submit_locations"])
     assert run_eval.disable_tools([]) == []

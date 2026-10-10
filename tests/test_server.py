@@ -304,6 +304,7 @@ async def test_event_stream_sends_snapshot_then_events_and_heartbeats(tmp_path: 
 
 
 def test_digest_keeps_reasoning_and_drops_bulk() -> None:
+    search = {"type": "search", "query": "Pastelaria Santo António Alfama", "sources": [{"type": "url", "url": "https://x.pt/" + "p" * 300}] * 20}
     digest = digest_event(
         {
             "seq": 4,
@@ -313,17 +314,33 @@ def test_digest_keeps_reasoning_and_drops_bulk() -> None:
             "penalty_state": {"multiplier": 0.95},
             "data": {
                 "stop_reason": "tool_use",
+                # as the loop logs them: the raw API item behind each block is not in the log
                 "content": [
-                    {"type": "thinking", "thinking": "Azulejo tiles suggest <b>Portugal</b>", "signature": "s" * 9000},
-                    {"type": "text", "text": "Zooming on the sign."},
+                    {"type": "thinking", "thinking": "Azulejo tiles suggest <b>Portugal</b>"},
+                    {"type": "thinking", "thinking": ""},
+                    {"type": "server_tool_use", "id": "ws_1", "name": "web_search", "input": search},
+                    {"type": "server_tool_use", "id": "ws_2", "name": "web_search", "input": {"type": "open_page", "url": "https://x.pt/a"}},
+                    {"type": "text", "text": "Zooming on the sign.", "annotations": [{"type": "url_citation", "url": "https://x.pt/a"}]},
                     {"type": "tool_use", "id": "t1", "name": "view_crop", "input": {"yaw": 90, "pitch": 0, "fov": 20}},
+                    {"type": "compaction", "item": {"id": "cmp_1", "type": "compaction", "encrypted_content": "<9000 chars omitted>"}},
                 ],
             },
         }
     )
-    assert [line["kind"] for line in digest["lines"]] == ["thinking", "text", "tool"]
+    assert [line["kind"] for line in digest["lines"]] == ["thinking", "tool", "tool", "text", "tool"]
     assert digest["lines"][0]["text"] == "Azulejo tiles suggest <b>Portugal</b>"
+    assert digest["lines"][1]["text"] == 'web_search search "Pastelaria Santo António Alfama"'
+    assert digest["lines"][2]["text"] == "web_search open_page https://x.pt/a"
+    assert digest["lines"][4]["text"].startswith("view_crop {")
     assert digest["multiplier"] == 0.95 and len(json.dumps(digest)) < 1000
+
+    refused = digest_event(
+        {"seq": 6, "type": "model_response", "data": {"stop_reason": "refusal", "content": [{"type": "refusal", "refusal": "I can't help with that."}]}}
+    )
+    assert refused["lines"] == [
+        {"kind": "text", "text": "I can't help with that."},
+        {"kind": "harness", "text": "stop_reason: refusal"},
+    ]
 
     result = digest_event(
         {"seq": 5, "type": "tool_result", "data": {"name": "view_crop", "is_error": False, "duration_ms": 41.2,

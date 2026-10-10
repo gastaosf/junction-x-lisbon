@@ -20,7 +20,7 @@ if TYPE_CHECKING:  # avoid import cycles; these are only type hints
 
 @dataclass
 class ToolResult:
-    # Anthropic tool_result content blocks: {"type": "text", ...} and/or
+    # Harness content blocks (the model client translates them for the API): {"type": "text", ...} and/or
     # {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": ...}}
     content: list[dict[str, Any]]
     is_error: bool = False

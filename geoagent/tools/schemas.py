@@ -1,7 +1,10 @@
 """Tool definitions sent to the model. Byte-stable: no timestamps, deterministic order.
 
-Strict schemas guarantee shape only; numeric ranges, option counts and the 10-entry cap are
-validated in code by the handlers (strict mode does not support min/max keywords).
+Function tools use the flat Responses API shape (name and parameters at the top level, no nested
+"function" object). Strict mode requires every object to set additionalProperties to false and
+to list every property as required, which _obj does. It guarantees shape only: numeric ranges,
+option counts and the 10-entry cap are validated in code by the handlers, so the schemas carry
+no min/max keywords.
 """
 
 from __future__ import annotations
@@ -52,7 +55,7 @@ _HYPOTHESES = {
 
 
 def _tool(name: str, description: str, schema: dict[str, Any]) -> dict[str, Any]:
-    return {"name": name, "description": description, "input_schema": schema, "strict": True}
+    return {"type": "function", "name": name, "description": description, "parameters": schema, "strict": True}
 
 
 VIEW_CROP = _tool(
@@ -176,11 +179,15 @@ HUMAN_TOOLS = [ASK_MULTIPLE_CHOICE]
 WEB_CLIENT_TOOLS = [SEARCH_PLACES, STREETVIEW_LOOKUP, SATELLITE_TILE, OVERPASS_QUERY]
 
 
+# Without a user_location the API ranks results for a user in the United States; an approximate
+# location with no fields switches that off. Constant, so the cached prefix stays byte-stable.
+WEB_SEARCH: dict[str, Any] = {"type": "web_search", "user_location": {"type": "approximate"}}
+
+
 def server_tools(settings: Settings) -> list[dict[str, Any]]:
-    return [
-        {"type": "web_search_20260209", "name": "web_search", "max_uses": settings.web_search_max_uses},
-        {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": settings.web_fetch_max_uses},
-    ]
+    """Hosted tools, run by the API. They have no "name" key: the type is the name. Opening a
+    result page is an action of web_search itself, so there is no separate fetch tool."""
+    return [WEB_SEARCH]
 
 
 def tool_definitions(settings: Settings) -> list[dict[str, Any]]:

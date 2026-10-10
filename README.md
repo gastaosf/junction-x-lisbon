@@ -14,7 +14,7 @@ uv run pytest -q             # offline; no key or network needed
 
 | Key | Needed for |
 |---|---|
-| `ANTHROPIC_API_KEY` | Every real run. Without it each panorama gets the fallback prior point and an `api_error` event. |
+| `OPENAI_API_KEY` | Every real run. Without it each panorama gets the fallback prior point and an `api_error` event. |
 | `GOOGLE_MAPS_API_KEY` | Street View lookups, and Google results in `search_places`. Optional. |
 | `MAPILLARY_TOKEN` | Second street-level source, and building the evaluation set. Optional. |
 
@@ -100,18 +100,27 @@ reduce to it exactly in its own setting:
 
 ## API failures and time limits
 
-- Every request is streamed with `max_tokens=64000` (thinking counts toward it on this model).
-  If a turn is still cut off, the tool calls completed before the cut are executed; only the one
-  being written is answered with an error.
+- Every request goes to the OpenAI Responses API, streamed, with `max_output_tokens=64000`
+  (reasoning counts toward it). If a turn is still cut off, the tool calls completed before the
+  cut are executed; only the one being written is answered with an error.
 - Transient failures (connection errors before or during the stream, timeouts, 408/409/429/5xx,
-  and `overloaded_error` / `api_error` events inside an open stream) are retried with capped
+  and errors reported inside an open stream, such as `server_error`) are retried with capped
   backoff until the panorama's hard deadline; `retry-after` is honoured when it fits in the time
-  left. 400/401/403/404/413 end the run on the best-so-far answer at once.
-- A stream that delivers nothing for `API_READ_TIMEOUT_S` (default 120 s) is dropped and the turn
-  re-issued.
+  left. 400/401/403/404/413/422 and a 429 with code `insufficient_quota` (no credit left) end the
+  run on the best-so-far answer at once. So do an in-stream error that names a request parameter
+  and a fourth consecutive in-stream error that carries no code at all.
+- A stream that delivers nothing for `API_READ_TIMEOUT_S` (default 60 s) is dropped and the turn
+  re-issued. The longest silence measured in a healthy stream was 11 s.
 - After every batch of tool results the agent is told the time used, the turn number and how much
-  of its image budget (100 images or about 24 MB of base64 per conversation) is spent; the real
-  deadlines of the run are in its first message.
+  of its image budget (80 images or about 24 MB of base64 per conversation) is spent; the real
+  deadlines of the run are in its first message. The budget is the harness's own: above 272,000
+  input tokens the API bills the whole request at its long-context rates (twice the input price,
+  1.5 times the output price). A full-size view costs about 2,540 input tokens, so 80 images are
+  about 200K and leave some 55K for instructions, tools, text and echoed reasoning.
+- Nothing is stored on the API side (`store=False`): the whole history, reasoning items included,
+  is re-sent on every turn, and prompt caching makes the repeated prefix cheap. Each panorama has
+  its own `prompt_cache_key`. `cost_usd` in the log is an estimate at the Standard-tier prices in
+  `geoagent/config.py`, including $10 per 1,000 `web_search` calls.
 - One `overpass_query` is limited to 60 s across both servers; a timeout moves on to the mirror
   instead of retrying. `search_places` waits at most 30 s for Nominatim before using Photon.
 
@@ -171,21 +180,50 @@ Set these in `.env`. The defaults are what we build to until the organisers answ
 | Q12 | Rules for the live panorama | `--live` budget (`Settings.live`), autonomous | 210 s hard deadline |
 
 Other settings (`HEDGE`, `NO_HUMAN`, `TEAM_NAME`, `RUNS_DIR`, `CACHE_DIR`, `GEOAGENT_MODEL`,
-`API_READ_TIMEOUT_S`) are listed in `.env.example`; budgets, `max_tokens`, prior points and service
-URLs are fields of `Settings` in `geoagent/config.py`.
+`GEOAGENT_IMAGE_DETAIL`, `API_READ_TIMEOUT_S`) are listed in `.env.example`; budgets, `max_tokens`
+(sent as `max_output_tokens`), prices, prior points and service URLs are fields of `Settings` in
+`geoagent/config.py`. The default model is `gpt-6.1-sol` at effort `high` (`xhigh` for the Special
+One); `GEOAGENT_MODEL=gpt-6-astra` selects the stronger model at five times the price.
 
 ## Before the scoring run
 
-- Run one real panorama first: nothing here has been exercised against the live Anthropic,
-  Google or Mapillary APIs yet. The request shape, the retry classification and the stream error
-  handling are tested against the installed SDK with a mock transport only.
+- What has been run against the live OpenAI API (`gpt-6.1-sol`, `openai` 3.28.0):
+  - One panorama end to end through `RunManager`, at effort `low`, 6 turns, web on, no operator:
+    submitted by the agent after 5 turns and 47 s for $0.17, with a valid export. Eight of the ten
+    tools were called with schema-valid arguments, the hosted `web_search` among them.
+  - The client on its own: multi-turn tool calls with images inside tool outputs, the reasoning
+    items echoed back at effort `high`, a tool call cut off at the output limit and a turn cut
+    off inside reasoning (both recovered), a hosted search with its billed count, and the
+    logged cost recomputed by hand from the usage.
+  - Errors: an unknown model (404), a bad key (401), a missing key and two kinds of 400. Each
+    ended the run with `api_error` and the fallback answer, without retries. A stalled stream
+    surfaced as a retryable `APITimeoutError`.
+  - Stream silence at efforts `high` and `xhigh`, up to a 155 s turn with 11,578 reasoning tokens.
+- What has not, and is covered by tests against the installed SDK with a mock transport only:
+  - A full-length run: the Special One's `xhigh` budget, 45 turns, the 80-image budget, six
+    panoramas in parallel, and an operator answering a question or sending a cue.
+  - `satellite_tile` and `ask_multiple_choice` called by the real model, and `streetview_lookup`
+    with a Google or Mapillary key (without one it returned its "unavailable" error).
+  - A 429 (rate limit or `insufficient_quota`) with its `retry-after`, a `response.failed`, an
+    in-stream `error` event, and the fallback for an organisation that cannot get reasoning
+    summaries (this key can).
+  - Efforts `max` and `medium`, and any model other than `gpt-6.1-sol`.
+  - The price of cache writes against an invoice: the harness charges $2.50 per million, about
+    $0.11 for a panorama's first turn.
+- Run one real panorama at the full budget before the scoring run.
+- Check the key's rate limits before running six panoramas in parallel: cached tokens count toward
+  the tokens-per-minute limit, and every turn re-sends the whole conversation. A 429 is retried
+  with backoff, so a limit that is too low shows up as `api_retry` events and slow turns.
+- Reasoning summaries (the "thinking" lines in the log and the UI) may require a verified
+  organisation. If the API rejects them the client stops asking and the run continues without them.
 - At the trial, on the venue network, read `image_payload_chars` and `latency_ms` from the
   `model_request` / `model_response` events of one run. The whole image history is re-uploaded on
   every turn; the initial views are encoded at JPEG quality 80 to limit that, at the sizes SPEC 6.2
   fixes. If turns are slow because of upload, lower `INITIAL_JPEG_QUALITY` in `geoagent/pano.py`.
-- Watch for `api_retry` events with `error_class: APITimeoutError` during long thinking turns. If a
-  healthy stream is being cut, raise `API_READ_TIMEOUT_S` (the ping cadence of the API during
-  thinking and server-side tools is not documented).
+- Watch for `api_retry` events with `error_class: APITimeoutError` during long reasoning turns. If a
+  healthy stream is being cut, raise `API_READ_TIMEOUT_S`: the 60 s default is five times the
+  longest silence seen in four measured streams (11 s inside reasoning, 4 s inside a hosted search),
+  the API documents no bound, and effort `max` was not measured.
 - Brief the operators: the cue lint is a backstop, cues and questions only work on running tiles,
   and a geocode ends the panorama.
 - Have a team member check the regional playbook in `geoagent/prompts.py` against Plonk It,

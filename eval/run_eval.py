@@ -28,7 +28,7 @@ GROUPS: tuple[str, ...] = ("all", Label.URBAN.value, Label.NON_URBAN.value)
 THRESHOLDS_M: tuple[tuple[str, float], ...] = (("within_100m", 100.0), ("within_1km", 1_000.0), ("within_10km", 10_000.0))
 MAX_PANORAMA_SCORE = 2.0 * sum(RANK_WEIGHTS)  # 16,050 before the Special One's x3
 PROTECTED_TOOLS = frozenset({"update_candidates", "submit_locations"})  # the answer path itself
-SERVER_TOOL_NAMES = frozenset({"web_search", "web_fetch"})
+SERVER_TOOL_NAMES = frozenset({"web_search"})  # hosted tools: defined by type, with no "name" key
 _COST_KEYS = ("cost_usd", "spend_usd", "total_cost_usd", "cost")
 _TIME_KEYS = ("wall_time_s", "wall_s", "elapsed_s", "duration_s", "time_s")
 
@@ -427,7 +427,7 @@ def disable_tools(names: Iterable[str]) -> list[str]:
         group[:] = [tool for tool in group if tool["name"] not in off]
     if off & SERVER_TOOL_NAMES:
         original = schemas.server_tools
-        schemas.server_tools = lambda settings: [t for t in original(settings) if t["name"] not in off]
+        schemas.server_tools = lambda settings: [t for t in original(settings) if (t.get("name") or t["type"]) not in off]
 
     async def disabled(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
         return ToolResult.error("This tool is switched off for this run. Continue without it.")
@@ -508,7 +508,7 @@ def run(
     run_id: str = typer.Option(None, help="Run directory name under runs/ (default: generated)."),
     runs_dir: Path = typer.Option(None, help="Parent directory for runs (default: settings.runs_dir)."),
 ) -> None:
-    """Run the agent over the eval set in --no-human mode and score it. Calls the Anthropic API."""
+    """Run the agent over the eval set in --no-human mode and score it. Calls the OpenAI API."""
     from geoagent.runner import RunManager
 
     entries, truths = _load_ground_truth(data)

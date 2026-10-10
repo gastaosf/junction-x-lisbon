@@ -4,7 +4,6 @@ version = "0.1.0"
 description = "Panorama localisation agent (Albatroz Challenge, JunctionX Lisbon 2026)"
 requires-python = ">=3.11"
 dependencies = [
-    "anthropic>=0.116",
     "pydantic>=2.7",
     "opencv-python-headless>=4.9",
     "numpy>=1.26",
@@ -15,6 +14,8 @@ dependencies = [
     "uvicorn>=0.30",
     "typer>=0.12",
     "python-dotenv>=1.0",
+    "openai>=3.28.0",
+    "httpx2>=2.13",
 ]
 
 [dependency-groups]

@@ -45,7 +45,7 @@ python -m eval.run_eval run --tools-off streetview_lookup,satellite_tile
 python -m eval.run_eval run --limit 5 --run-id smoke          # first 5 panoramas only
 ```
 
-This calls the Anthropic API (and the external tools) and costs money. It always runs in
+This calls the OpenAI API (and the external tools) and costs money. It always runs in
 `--no-human` mode. Each panorama's own Mapillary image id, everything within 25 m of it and the
 whole Mapillary sequence (drive) it came from are excluded from `streetview_lookup`, so the agent
 cannot be handed its source imagery or the neighbouring frames of the same drive. A set built

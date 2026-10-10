@@ -1,14 +1,18 @@
-"""Hand-written async Messages API loop (SPEC 6.1, 6.5).
+"""Hand-written async Responses API loop (SPEC 6.1, 6.5).
 
-Not the Agent SDK: we need every request and response in the event log, pre-emption of an
+Not the Agents SDK: we need every request and response in the event log, pre-emption of an
 in-flight call at the hard deadline, and the ability to wait on an operator's MCQ click.
 
-Invariants this module must keep for claude-opus-5-5:
-- the system prompt, tool list and request settings are built once and never change;
-- conversation history is append-only and assistant content is echoed back unchanged
-  (thinking blocks are bound to the exact prefix that produced them);
-- tool choice cannot be forced, so nothing depends on submit_locations being called:
+Invariants this module must keep:
+- the instructions, tool list and request settings are built once and never change (they are
+  the cached prefix of every request);
+- conversation history is append-only and assistant content is echoed back unchanged (the API
+  is used statelessly, so each reasoning item must return exactly as it arrived);
+- tool choice is left to the model, so nothing depends on submit_locations being called:
   whatever happens, run_agent ends with session.finalize().
+
+The history is kept in a vendor-neutral block format; the model client translates it to and
+from Responses API items.
 """
 
 from __future__ import annotations
@@ -26,9 +30,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Protocol
 
-import anthropic
 import httpx
-import httpx2  # the transport under anthropic 1.x; `httpx` above is what our own tools use
+import httpx2  # the transport under the openai SDK; `httpx` above is what our own tools use
+import openai
 
 from . import prompts
 from .config import Budget, Pricing, Settings
@@ -38,39 +42,41 @@ from .tools.base import ToolContext, ToolResult
 from .tools.registry import execute_tool, refuse_tool
 from .tools.schemas import tool_definitions
 
-# `fallbacks: "default"` re-runs a classifier-declined request on Anthropic's recommended
-# substitute model inside the same call; this header gates the scalar form.
-FALLBACK_BETA = "server-side-fallback-2026-07-01"
-
 # Transient API failures are retried until the hard deadline pre-empts the run: giving up early
 # only swaps a possible recovery for the same best-so-far answer the deadline would submit.
 RETRY_BASE_DELAY_S = 2.0
 RETRY_MAX_DELAY_S = 20.0
 RETRY_JITTER = 0.25  # six panoramas share one API key; do not retry in lockstep
-# Error types that are transient whatever HTTP status carries them. An `event: error` inside an
-# already-open stream surfaces as an APIStatusError whose status_code is the stream's 200.
-RETRYABLE_ERROR_TYPES = frozenset({"overloaded_error", "api_error", "rate_limit_error", "timeout_error"})
-TERMINAL_ERROR_TYPES = frozenset(
+RETRYABLE_STATUS_CODES = frozenset({408, 409, 429})
+# A 429 that waiting cannot cure: the account is out of credit.
+QUOTA_ERROR_CODE = "insufficient_quota"
+# An error inside an already-open stream (an `error` event or a failed response) has no HTTP
+# status and is transient unless its code names a fault in the request itself.
+REQUEST_FAULT_CODES = frozenset(
     {
-        "invalid_request_error",
-        "authentication_error",
-        "permission_error",
-        "not_found_error",
-        "request_too_large",
-        "billing_error",
+        QUOTA_ERROR_CODE,
+        "invalid_prompt",
+        "context_length_exceeded",
+        "content_filter",
+        "content_policy_violation",
+        "bio_policy",
+        "data_residency_mismatch",
+        "unsupported_image_media_type",
+        "empty_image_file",
+        "failed_to_download_image",
     }
 )
-RETRYABLE_STATUS_CODES = frozenset({408, 409, 429})
-# Per-chunk read timeout. The SDK default of 600 s lets a half-open connection eat most of a
-# panorama's deadline; a healthy stream sends deltas or pings far more often than this.
-API_READ_TIMEOUT_S = 120.0
-API_CONNECT_TIMEOUT_S = 10.0
-_PLACEHOLDER_REQUEST = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
-_TOOL_JSON_ERROR = "Unable to parse tool parameter JSON"
+REQUEST_FAULT_CODE_PARTS = ("invalid_", "image_", "policy_violation")
+# An in-stream error with no code at all cannot be classified. A few are worth re-issuing the
+# turn for; a longer run of them is a fault in the request that would repeat until the deadline.
+UNCODED_STREAM_ERROR_RETRIES = 3
 
-# A request body over 32 MB is rejected outright and would end the run, so images stop well short
-# of it (base64 characters, which is what travels). The count is the documented per-request floor.
-MAX_REQUEST_IMAGES = 100
+# Harness budgets, far inside the API's own per-request limits. Above 272K input tokens the whole
+# request moves to the long-context price, and a full-size view costs about 2,540 tokens: eighty
+# images are about 200K, which with the 16.5K of instructions and tools leaves some 55K for text,
+# tool output and echoed reasoning. The payload is counted in base64 characters, which is what is
+# re-uploaded on every turn.
+MAX_REQUEST_IMAGES = 80
 MAX_IMAGE_PAYLOAD_CHARS = 24_000_000
 IMAGE_BUDGET_NOTICE = (
     "[Image omitted by the harness: this conversation has reached its image budget, so no further "
@@ -82,6 +88,7 @@ TRUNCATED_TOOL_NOTICE = (
     "Not executed: your previous output hit the output-token limit, so this tool call may be "
     "incomplete. Re-issue it, keeping any accompanying text short."
 )
+INCOMPLETE_TOOL_NOTICE = "Not executed: this tool call arrived with incomplete or malformed arguments. Re-issue it."
 MCQ_WITH_SUBMIT_NOTICE = (
     "Question not asked and no penalty applied: do not combine ask_multiple_choice with "
     "submit_locations in one turn, because the answer could not change a list that is already "
@@ -89,91 +96,18 @@ MCQ_WITH_SUBMIT_NOTICE = (
 )
 
 # Opaque blobs that would bloat the log without telling a reader anything.
-_OPAQUE_KEYS = frozenset({"signature", "encrypted_content", "encrypted_index", "data"})
+_OPAQUE_KEYS = frozenset({"encrypted_content", "data"})
+# Blocks whose logged fields already say everything their Responses API item does.
+_ITEM_FREE_BLOCKS = frozenset({"thinking", "text", "tool_use", "server_tool_use", "refusal"})
 _OPAQUE_MIN_CHARS = 256
 _IMAGE_SUFFIX = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif"}
 
 
 class ModelClient(Protocol):
     async def create(self, **params: Any) -> Any:
-        """Send one Messages API request and return the final message."""
-
-
-class AnthropicModelClient:
-    """Streams every request (long thinking turns would otherwise hit HTTP timeouts) and returns
-    the accumulated final message."""
-
-    def __init__(
-        self, client: anthropic.AsyncAnthropic | None = None, *, read_timeout_s: float = API_READ_TIMEOUT_S
-    ) -> None:
-        # The loop does its own deadline-aware retries; keep the SDK's short.
-        self._client = client or anthropic.AsyncAnthropic(
-            max_retries=1,
-            timeout=anthropic.Timeout(600.0, connect=API_CONNECT_TIMEOUT_S, read=read_timeout_s),
-        )
-        self._fallbacks_supported = True
-
-    async def create(self, **params: Any) -> Any:
-        if not self._fallbacks_supported:
-            params = _without_fallbacks(params)
-        try:
-            return await self._stream(params)
-        except anthropic.BadRequestError as exc:
-            # Server-side fallbacks are a beta that not every platform or account accepts. Losing
-            # the opt-in costs little; a 400 on every request would cost the whole run.
-            if "fallbacks" not in params or "fallback" not in str(exc).lower():
-                raise
-            self._fallbacks_supported = False
-            return await self._stream(_without_fallbacks(params))
-
-    async def _stream(self, params: dict[str, Any]) -> Any:
-        try:
-            async with self._client.beta.messages.stream(**params) as stream:
-                return await stream.get_final_message()
-        except TypeError as exc:
-            # The SDK reports missing credentials as a bare TypeError; surface it as an API
-            # failure so the log says "no key" instead of recording a harness crash.
-            if "authentication method" not in str(exc):
-                raise
-            raise anthropic.AnthropicError(
-                "No Anthropic credentials: set ANTHROPIC_API_KEY (environment or .env) before running."
-            ) from exc
-        except httpx2.TimeoutException as exc:
-            # The SDK wraps transport errors only while sending. Once the 200 stream is open, a
-            # stall or a dropped connection surfaces raw; give it the SDK's own retryable types.
-            raise anthropic.APITimeoutError(request=_request_of(exc)) from exc
-        except httpx2.TransportError as exc:
-            raise anthropic.APIConnectionError(
-                message=f"Connection lost mid-stream ({type(exc).__name__}: {exc})", request=_request_of(exc)
-            ) from exc
-        except ValueError as exc:
-            # The stream accumulator raises a bare ValueError when a tool call's input is not
-            # valid JSON, and a corrupted event payload fails to decode. Either way the response
-            # is unusable and re-issuing the turn is the remedy (the SDK's own advice for the
-            # first). Any other ValueError is a programming error and must stay visible.
-            if _TOOL_JSON_ERROR not in str(exc) and not isinstance(exc, json.JSONDecodeError):
-                raise
-            raise anthropic.APIConnectionError(
-                message=f"Unusable streamed response ({str(exc)[:300]})", request=_PLACEHOLDER_REQUEST
-            ) from exc
-
-    async def aclose(self) -> None:
-        await self._client.close()
-
-
-def _request_of(exc: httpx2.TransportError) -> httpx2.Request:
-    try:
-        return exc.request
-    except RuntimeError:  # ".request property has not been set"
-        return _PLACEHOLDER_REQUEST
-
-
-def _without_fallbacks(params: dict[str, Any]) -> dict[str, Any]:
-    out = {k: v for k, v in params.items() if k != "fallbacks"}
-    betas = [b for b in out.pop("betas", []) if b != FALLBACK_BETA]
-    if betas:
-        out["betas"] = betas
-    return out
+        """Send one request (the request params plus `messages`, the neutral history) and return
+        the finished response as an object with id, model, content, stop_reason, stop_details
+        and usage."""
 
 
 def _field(obj: Any, name: str, default: Any = None) -> Any:
@@ -182,53 +116,64 @@ def _field(obj: Any, name: str, default: Any = None) -> Any:
     return getattr(obj, name, default)
 
 
+_USAGE_KEYS = (
+    "input_tokens",
+    "cached_input_tokens",
+    "cache_write_tokens",
+    "output_tokens",
+    "reasoning_tokens",
+    "web_search_requests",
+)
+
+
 def usage_dict(usage: Any) -> dict[str, int]:
-    """Flatten an SDK usage object (or dict) to the integer counters we price and log."""
-    server = _field(usage, "server_tool_use")
-    return {
-        "input_tokens": int(_field(usage, "input_tokens") or 0),
-        "output_tokens": int(_field(usage, "output_tokens") or 0),
-        "cache_creation_input_tokens": int(_field(usage, "cache_creation_input_tokens") or 0),
-        "cache_read_input_tokens": int(_field(usage, "cache_read_input_tokens") or 0),
-        "web_search_requests": int(_field(server, "web_search_requests") or 0),
-        "web_fetch_requests": int(_field(server, "web_fetch_requests") or 0),
-    }
+    """The integer counters we price and log, from a model client's usage (dict or object).
+    `input_tokens` includes the cached and cache-write tokens; `output_tokens` includes reasoning."""
+    return {key: int(_field(usage, key) or 0) for key in _USAGE_KEYS}
 
 
 def estimate_cost(usage: Any, pricing: Pricing) -> float:
-    """USD for one response. An estimate: a turn served by a fallback model bills at that
-    model's rates, which we do not track."""
+    """USD for one response. Above the long-context threshold the whole request is re-priced,
+    not just the tokens past it."""
     u = usage_dict(usage)
+    long = u["input_tokens"] > pricing.long_context_threshold
+    in_mult, out_mult = (pricing.long_input_multiplier, pricing.long_output_multiplier) if long else (1.0, 1.0)
+    cached, written = u["cached_input_tokens"], u["cache_write_tokens"]
+    uncached = max(u["input_tokens"] - cached - written, 0)
     tokens = (
-        u["input_tokens"] * pricing.input
-        + u["output_tokens"] * pricing.output
-        + u["cache_creation_input_tokens"] * pricing.cache_write
-        + u["cache_read_input_tokens"] * pricing.cache_read
-    )
+        uncached * pricing.input + cached * pricing.cached_input + written * pricing.cache_write
+    ) * in_mult + u["output_tokens"] * pricing.output * out_mult
     return tokens / 1_000_000 + u["web_search_requests"] * pricing.web_search_per_1k / 1000
 
 
-def build_request_params(settings: Settings, budget: Budget) -> dict[str, Any]:
-    """Everything except `messages`. Built once per run: any change here between turns would
-    invalidate the prompt cache and the thinking blocks already in the history."""
+def prompt_cache_key(run_id: str, panorama_id: str) -> str:
+    """One cache partition per panorama conversation, the same on every turn and on a resumed
+    run. The API caps the key at 64 characters."""
+    key = f"geoagent-{run_id}-{panorama_id}"
+    if len(key) <= 64:
+        return key
+    return "geoagent-" + hashlib.sha256(f"{run_id}/{panorama_id}".encode()).hexdigest()[:40]
+
+
+def build_request_params(settings: Settings, budget: Budget, cache_key: str) -> dict[str, Any]:
+    """Everything except the conversation. Built once per run: any change here between turns
+    would invalidate the prompt cache, whose prefix is the tools and the instructions."""
+    include = ["reasoning.encrypted_content"]
+    if settings.allow_web:
+        include.append("web_search_call.action.sources")
     return {
         "model": settings.model,
-        "max_tokens": settings.max_tokens,
-        # Tools render before system, so this one breakpoint caches both.
-        "system": [
-            {
-                "type": "text",
-                "text": prompts.build_system_prompt(settings),
-                "cache_control": {"type": "ephemeral"},
-            }
-        ],
+        "instructions": prompts.build_system_prompt(settings),
         "tools": tool_definitions(settings),
-        "thinking": {"type": "adaptive", "display": "summarized"},
-        "output_config": {"effort": budget.effort},
-        # Automatic breakpoint on the growing conversation tail (images are the bulk of the cost).
-        "cache_control": {"type": "ephemeral"},
-        "betas": [FALLBACK_BETA],
-        "fallbacks": "default",
+        "reasoning": {"effort": budget.effort, "summary": "auto"},
+        # Reasoning tokens count toward this limit.
+        "max_output_tokens": settings.max_tokens,
+        "parallel_tool_calls": True,
+        # Stateless: nothing is kept server-side, so the history is re-sent in full and the
+        # reasoning items must come back encrypted to be echoed.
+        "store": False,
+        "include": include,
+        "prompt_cache_key": cache_key,
     }
 
 
@@ -307,52 +252,51 @@ def _text(text: str) -> dict[str, Any]:
     return {"type": "text", "text": text}
 
 
-def _echoable(content: list[Any]) -> list[Any]:
-    """Assistant content as it may be sent back.
-
-    Normally that is the content unchanged. After a mid-output server-side fallback the blocks
-    before the last `fallback` marker came from the model that declined: its thinking, client
-    tool calls and unanswered server tool calls must be left out, or the next request is a 400.
-    """
-    boundary = max((i for i, b in enumerate(content) if _field(b, "type") == "fallback"), default=-1)
-    if boundary < 0:
-        return content
-    head = content[:boundary]
-    answered = {_field(b, "tool_use_id") for b in head if str(_field(b, "type")).endswith("_tool_result")}
-
-    def survives(block: Any) -> bool:
-        kind = str(_field(block, "type"))
-        if kind == "server_tool_use":
-            return _field(block, "id") in answered
-        return kind == "text" or kind.endswith("_tool_result")
-
-    return [b for b in head if survives(b)] + content[boundary:]
+def _without_items(content: list[Any]) -> list[Any]:
+    """Response content for the log, without the raw API item behind each block we understand."""
+    out = []
+    for block in content:
+        if isinstance(block, dict) and block.get("type") in _ITEM_FREE_BLOCKS:
+            block = {k: v for k, v in block.items() if k != "item"}
+        out.append(block)
+    return out
 
 
-def _error_type(exc: BaseException) -> str | None:
-    kind = getattr(exc, "type", None)
-    if isinstance(kind, str):
-        return kind
-    body = getattr(exc, "body", None)
-    error = body.get("error") if isinstance(body, dict) else None
-    kind = error.get("type") if isinstance(error, dict) else None
-    return kind if isinstance(kind, str) else None
+def _error_field(exc: BaseException, name: str) -> str | None:
+    value = getattr(exc, name, None)
+    if not isinstance(value, str):
+        body = getattr(exc, "body", None)
+        value = body.get(name) if isinstance(body, dict) else None
+    return value if isinstance(value, str) else None
+
+
+def _request_fault(code: str | None) -> bool:
+    return code is not None and (code in REQUEST_FAULT_CODES or any(part in code for part in REQUEST_FAULT_CODE_PARTS))
 
 
 def _retryable(exc: BaseException) -> bool:
-    """Transient failures worth re-issuing the turn for. 400/401/403/404/413 stay terminal."""
-    if isinstance(exc, (anthropic.APIConnectionError, anthropic.RateLimitError, httpx2.TransportError)):
+    """Transient failures worth re-issuing the turn for. 400/401/403/404/413/422 stay terminal."""
+    if isinstance(exc, (openai.APIConnectionError, httpx2.TransportError)):
         return True
-    if not isinstance(exc, anthropic.APIStatusError):
+    if not isinstance(exc, openai.APIError):
         return False
-    kind = _error_type(exc)
-    if kind in RETRYABLE_ERROR_TYPES:
-        return True
-    status = exc.status_code
-    if status >= 500 or status in RETRYABLE_STATUS_CODES:
-        return True
-    # Below 400 the error arrived inside an open stream: transient unless it names a request fault.
-    return status < 400 and kind not in TERMINAL_ERROR_TYPES
+    code = _error_field(exc, "code")
+    if code == QUOTA_ERROR_CODE:
+        return False
+    status = getattr(exc, "status_code", None)
+    if isinstance(status, int):
+        return status >= 500 or status in RETRYABLE_STATUS_CODES
+    # No status: the error arrived inside an open stream. One that names a request parameter is
+    # a fault in the request, whatever its code.
+    if _error_field(exc, "type") == "invalid_request_error" or _error_field(exc, "param"):
+        return False
+    return not _request_fault(code)
+
+
+def _uncoded_stream_error(exc: BaseException) -> bool:
+    if isinstance(exc, (openai.APIConnectionError, openai.APIStatusError, httpx2.TransportError)):
+        return False
+    return _error_field(exc, "code") is None
 
 
 def _retry_delay(exc: BaseException, attempt: int, remaining_s: float | None = None) -> float:
@@ -374,7 +318,9 @@ def _api_error_data(exc: BaseException) -> dict[str, Any]:
     return {
         "error_class": type(exc).__name__,
         "status_code": getattr(exc, "status_code", None),
-        "error_type": _error_type(exc),
+        "error_type": _error_field(exc, "type"),
+        "error_code": _error_field(exc, "code"),
+        "param": _error_field(exc, "param"),
         "request_id": getattr(exc, "request_id", None),
         "message": str(exc),
     }
@@ -394,7 +340,8 @@ class _AgentRun:
         self.client = client
         self.budget = budget
         self.ctx = ToolContext(session=session, pano=pano, settings=session.settings, http=http)
-        self.params = build_request_params(session.settings, budget)
+        cache_key = prompt_cache_key(session.run_id, session.task.panorama_id)
+        self.params = build_request_params(session.settings, budget, cache_key)
         self.images = _ImageRefs(session.image_dir)
         self.messages: list[dict[str, Any]] = []
         self.logged = 0  # messages[:logged] have already appeared in a model_request event
@@ -427,7 +374,7 @@ class _AgentRun:
 
     def _emit_run_start(self) -> None:
         task, settings = self.session.task, self.session.settings
-        request = {k: v for k, v in self.params.items() if k not in {"system", "tools"}}
+        request = {k: v for k, v in self.params.items() if k not in {"instructions", "tools"}}
         self.emit(
             "harness",
             "run_start",
@@ -447,7 +394,7 @@ class _AgentRun:
                 "effort": self.budget.effort,
                 "budget": self.budget.model_dump(),
                 "request": request,
-                "system_prompt": self.params["system"][0]["text"],
+                "system_prompt": self.params["instructions"],
                 "tools": self.params["tools"],
                 "git_sha": git_sha(),
                 "flags": {
@@ -483,37 +430,37 @@ class _AgentRun:
                 return "finalized_externally"
             try:
                 response = await self._model_turn()
-            except (anthropic.AnthropicError, httpx2.TransportError) as exc:
+            except (openai.OpenAIError, httpx2.TransportError) as exc:
                 self.emit("harness", "api_error", _api_error_data(exc))
                 return "finalized_externally" if self.session.final is not None else "api_error"
             stop = _field(response, "stop_reason")
-            content = _echoable(list(_field(response, "content") or []))
+            content = list(_field(response, "content") or [])
             if stop == "refusal":
-                # A refusal can cut a tool_use off mid-input: never execute that turn's tools.
+                # A refusal can cut a tool call off mid-arguments: never execute that turn's tools.
                 return "refusal"
             if content:
                 self.messages.append({"role": "assistant", "content": content})
             tool_uses = [b for b in content if _field(b, "type") == "tool_use"]
-            reply: list[dict[str, Any]] | None
-            if stop == "pause_turn":
-                reply = None  # the server resumes from the trailing server_tool_use block
+            reply: list[dict[str, Any]]
+            if tool_uses:
+                notice = TRUNCATED_TOOL_NOTICE if stop == "max_tokens" else INCOMPLETE_TOOL_NOTICE
+                reply = await self._run_tools(tool_uses, notice)
             elif stop == "max_tokens":
-                reply = await self._truncated_reply(content, tool_uses)
-            elif tool_uses:
-                reply = await self._run_tools(tool_uses)
+                reply = [_text(prompts.MAX_TOKENS_NOTICE)]
             elif nudged:
                 return "end_turn"
             else:
                 nudged = True
                 reply = [_text(prompts.NO_SUBMISSION_NUDGE)]
             if self.session.final is not None:
-                submitted = any(_field(b, "name") == "submit_locations" for b in tool_uses)
+                submitted = any(
+                    _field(b, "name") == "submit_locations" and not _field(b, "incomplete") for b in tool_uses
+                )
                 return "submitted" if submitted else "finalized_externally"
             if self.spend >= self.budget.max_spend_usd:
                 return "max_spend"
-            if reply is not None:
-                last_turn_next = turn == self.budget.max_turns - 1
-                self.messages.append({"role": "user", "content": reply + self._notices(last_turn_next)})
+            last_turn_next = turn == self.budget.max_turns - 1
+            self.messages.append({"role": "user", "content": reply + self._notices(last_turn_next)})
         return "max_turns"
 
     async def _model_turn(self) -> Any:
@@ -550,7 +497,7 @@ class _AgentRun:
                 "model": _field(response, "model"),
                 "stop_reason": _field(response, "stop_reason"),
                 "stop_details": _jsonable(_field(response, "stop_details")),
-                "content": self.images.for_log(_field(response, "content") or []),
+                "content": self.images.for_log(_without_items(list(_field(response, "content") or []))),
                 "usage": usage,
                 "cost_usd": round(cost, 6),
                 "latency_ms": latency_ms,
@@ -562,12 +509,13 @@ class _AgentRun:
         """One model call, re-issued on transient failures until it succeeds. The hard-deadline
         timeout around the conversation is what bounds this loop. Re-sending is safe: nothing is
         appended to self.messages until a response has come back whole."""
-        attempt = 0
+        attempt = uncoded = 0
         while True:
             try:
                 return await self.client.create(**self.params, messages=self.messages)
-            except (anthropic.APIError, httpx2.TransportError) as exc:
-                if not _retryable(exc) or self.session.final is not None:
+            except (openai.APIError, httpx2.TransportError) as exc:
+                uncoded = uncoded + 1 if _uncoded_stream_error(exc) else 0
+                if not _retryable(exc) or uncoded > UNCODED_STREAM_ERROR_RETRIES or self.session.final is not None:
                     raise
                 remaining = self.budget.hard_deadline_s - self.session.elapsed_s()
                 delay = _retry_delay(exc, attempt, remaining)
@@ -584,11 +532,17 @@ class _AgentRun:
                 )
                 await asyncio.sleep(delay)
 
-    async def _run_tools(self, tool_uses: list[Any]) -> list[dict[str, Any]]:
-        """Run every client tool call of the turn concurrently; all results go in one user message."""
+    async def _run_tools(self, tool_uses: list[Any], unexecuted_notice: str) -> list[dict[str, Any]]:
+        """Run every function call of the turn concurrently; all results go in one user message.
+
+        A call flagged incomplete (cut off at the output limit, or with arguments that are not a
+        JSON object) is answered with the notice instead of being run. Only the call being
+        written when the limit hit can be incomplete, so earlier ones still run.
+        """
+        runnable = [b for b in tool_uses if not _field(b, "incomplete")]
         # A question asked in the turn that submits is charged x0.95 and then closed unanswered by
         # the submission itself, so it is never put to the operator.
-        submitting = any(_field(b, "name") == "submit_locations" for b in tool_uses)
+        submitting = any(_field(b, "name") == "submit_locations" for b in runnable)
 
         async def one(block: Any) -> ToolResult:
             name, args, tool_use_id = _field(block, "name"), _field(block, "input"), _field(block, "id")
@@ -596,8 +550,14 @@ class _AgentRun:
                 return refuse_tool(self.ctx, name, args, MCQ_WITH_SUBMIT_NOTICE, tool_use_id=tool_use_id)
             return await execute_tool(self.ctx, name, args, tool_use_id=tool_use_id)
 
-        results = await asyncio.gather(*(one(b) for b in tool_uses), return_exceptions=True)
-        return [self._tool_result(block, result) for block, result in zip(tool_uses, results)]
+        results = iter(await asyncio.gather(*(one(b) for b in runnable), return_exceptions=True))
+        # Every function call needs an output, run or not, or the next request is a 400.
+        return [
+            {"type": "tool_result", "tool_use_id": _field(b, "id"), "content": unexecuted_notice, "is_error": True}
+            if _field(b, "incomplete")
+            else self._tool_result(b, next(results))
+            for b in tool_uses
+        ]
 
     def _admit_image(self, block: dict[str, Any]) -> bool:
         """Count an image block against the conversation's budget; False once the budget is spent."""
@@ -611,7 +571,7 @@ class _AgentRun:
         return True
 
     def _tool_result(self, block: Any, result: ToolResult | BaseException) -> dict[str, Any]:
-        # A tool_use without a matching tool_result is a 400 that would end the conversation.
+        # A function call without a matching output is a 400 that would end the conversation.
         if isinstance(result, BaseException):
             result = ToolResult.error(f"Tool failed: {type(result).__name__}: {result}")
         content = [b if self._admit_image(b) else _text(IMAGE_BUDGET_NOTICE) for b in result.content]
@@ -623,25 +583,6 @@ class _AgentRun:
         if result.is_error:
             out["is_error"] = True
         return out
-
-    async def _truncated_reply(self, content: list[Any], tool_uses: list[Any]) -> list[dict[str, Any]]:
-        """Reply to a turn cut off at max_tokens. Only the block being written when the limit hit
-        can be incomplete, so earlier tool calls (an update_candidates, say) still run."""
-        if not tool_uses:
-            return [_text(prompts.MAX_TOKENS_NOTICE)]
-        cut = tool_uses[-1] if _field(content[-1], "type") == "tool_use" else None
-        complete = [b for b in tool_uses if b is not cut]
-        reply = await self._run_tools(complete) if complete else []
-        if cut is not None:
-            reply.append(
-                {
-                    "type": "tool_result",
-                    "tool_use_id": _field(cut, "id"),
-                    "content": TRUNCATED_TOOL_NOTICE,
-                    "is_error": True,
-                }
-            )
-        return reply
 
     def _status(self) -> str:
         payload = self.image_chars / MAX_IMAGE_PAYLOAD_CHARS

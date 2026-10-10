@@ -97,7 +97,7 @@ panorama.jpg + label + timestamp
         |
    pano.py  ->  overview + perspective views
         |
-   agent loop (Claude, tools)  <->  tools: view_crop, sun_position, search_places,
+   agent loop (model, tools)   <->  tools: view_crop, sun_position, search_places,
         |                                  overpass_query, streetview_lookup,
         |                                  satellite_tile, web_search
         |  update_candidates (hypotheses with probabilities)
@@ -109,7 +109,7 @@ panorama.jpg + label + timestamp
 
 The model proposes weighted hypotheses; code builds the final list. The model never hand-ranks the 10 slots.
 
-**Stack:** Python 3.11+, `anthropic` (async), `pydantic`, `opencv-python`, `numpy`, `Pillow`, `httpx`, `pvlib` or `astral`, FastAPI with server-sent events and one static HTML page (Leaflet map), `typer` CLI.
+**Stack:** Python 3.11+, `openai` (async), `pydantic`, `opencv-python`, `numpy`, `Pillow`, `httpx`, `pvlib` or `astral`, FastAPI with server-sent events and one static HTML page (Leaflet map), `typer` CLI.
 
 ```
 geoagent/
@@ -134,15 +134,15 @@ tests/             # test_scoring.py, test_penalties.py, test_allocate.py
 
 ### 6.1 Model and request settings
 
-- Model `claude-opus-5-5`, effort `high` (`xhigh` for the Special One), adaptive thinking with summarised display so the reasoning lands in the log.
-- A hand-written async Messages API loop (about 100 lines), not the Agent SDK: we need full logging of each request, deadline pre-emption, and the ability to pause for an MCQ click.
-- Conversation history is append-only; the system prompt and tool list are byte-stable (no timestamps) so prompt caching works.
-- Tool choice cannot be forced on this model, so the harness never depends on the model calling `submit_locations` (section 6.5).
-- Handle `tool_use`, `end_turn`, `pause_turn`, `max_tokens` and `refusal` stop reasons. The system prompt states that this is an organiser-sanctioned geolocation competition on organiser-supplied images.
+- Model `gpt-6.1-sol` through the OpenAI Responses API, reasoning effort `high` (`xhigh` for the Special One), with reasoning summaries requested so the reasoning lands in the log.
+- A hand-written async Responses API loop (about 100 lines), not the Agents SDK: we need full logging of each request, deadline pre-emption, and the ability to pause for an MCQ click.
+- Conversation history is append-only and re-sent in full on every turn (`store=False`, reasoning items echoed with their encrypted content); the instructions and tool list are byte-stable (no timestamps) so prompt caching works, with one `prompt_cache_key` per panorama.
+- Tool choice is left to the model, so the harness never depends on the model calling `submit_locations` (section 6.5).
+- Handle a turn with tool calls, a turn that ends without one, output cut off at `max_output_tokens`, and a refusal. The system prompt states that this is an organiser-sanctioned geolocation competition on organiser-supplied images.
 
 ### 6.2 Panorama pre-processing
 
-A 6080 x 3040 image sent whole is downscaled to about 7 px/degree (native is 16.9), which makes signs unreadable. Every image sent to the model is capped at 2000 px per side, because requests with more than 20 images enforce that limit.
+A 6080 x 3040 image sent whole is downscaled to about 7 px/degree (native is 16.9), which makes signs unreadable. Every image sent to the model is capped at 2000 px per side, because image tokens grow with area (about 4,800 input tokens at that size); images are sent with `detail: original`.
 
 Initial view set, each preceded by a text label:
 1. Equirectangular overview at 2000 x 1000 with a yaw ruler along the top edge.
@@ -161,7 +161,7 @@ All client tools use strict schemas; option counts, coordinate ranges and the 10
 | `update_candidates(hypotheses[])` | Record `{lat, lng, probability, radius_m, label, evidence}`; free; the harness keeps the latest as best-so-far | Local | Must |
 | `submit_locations(hypotheses[], reasoning_summary)` | Final hypotheses; the harness builds the list | Local | Must |
 | `search_places(query, countrycodes, viewbox)` | Geocode names read off signs and the agent's own place names | Nominatim, then Photon; Google Geocoding/Places if a key exists | Must |
-| `web_search` / `web_fetch` | Look up business names, phone numbers, landmarks | Claude server tools | Must |
+| `web_search` | Look up business names, phone numbers, landmarks; it can open a result page itself | OpenAI hosted tool | Must |
 | `ask_multiple_choice(question, options[2..4], why_it_matters)` | One question to the operator; costs x0.95 | Operator UI | Must |
 | `streetview_lookup(lat, lng, radius_m, headings[])` | Street-level views plus the pano's exact coordinate and date, for visual comparison | Google Street View Static API (metadata calls are free); Mapillary as second source | Should |
 | `satellite_tile(lat, lng, zoom)` | Aerial image, north up, with scale bar: road layout, roofs, field patterns, coastline | Esri World Imagery export; national orthophotos as alternates | Should |
@@ -258,7 +258,7 @@ Event envelope:
 | Type | Data |
 |---|---|
 | `run_start` | panorama filename and sha256, label, capture timestamp, model, effort, system prompt text, tool definitions, git SHA |
-| `model_request` / `model_response` | messages appended this turn (images as `{sha256, path, yaw, pitch, fov}`), full response content including thinking summaries, stop reason, token usage, latency |
+| `model_request` / `model_response` | messages appended this turn (images as `{sha256, path, yaw, pitch, fov}`), full response content including reasoning summaries, stop reason, token usage, latency |
 | `tool_call` / `tool_result` | tool name, input, output, error flag, duration, external URL called |
 | `mcq_asked` / `mcq_answered` | question, options, selected index, multiplier before and after |
 | `human_cue` | text, character count, lint verdict, multiplier before and after |
@@ -319,7 +319,7 @@ True locations are never disclosed, so we need our own ground truth.
 | **Out of scope** | Fine-tuning any model; PIGEON (weights not released); Google Street View tiles API (its policy prohibits machine analysis); Google Lens scraping. |
 
 **Keys to obtain now**
-- Anthropic API key: check the organisation's rate-limit tier and spend cap in the Console; dry-run six parallel panoramas during the trial.
+- OpenAI API key: check the organisation's usage tier and budget in the dashboard (the current key reports 5,000 requests and 1,000,000 tokens per minute, and cached tokens count toward the token limit); dry-run six parallel panoramas during the trial.
 - Google Cloud project with billing: Street View Static, Geocoding, Places, Maps Static. Needs a credit card; free monthly caps should cover the weekend if candidates are filtered with the free metadata call first.
 - Mapillary client token (free).
 - No key: Nominatim, Photon, Overpass, Esri World Imagery, DGT / PNOA / IGN orthophotos, OpenTopoData.
@@ -352,7 +352,7 @@ Each has a default we build to until answered; each default is a config flag.
 | Urban pin right town, wrong street (worth under 10%) | Street-level compare-and-walk loop is the M2 priority; operator MCQ on candidate streets |
 | Public OSM services throttled on shared Wi-Fi | Disk cache, Photon and an Overpass mirror wired before the trial, phone hotspot as backup |
 | Model refuses or never submits | Competition context in the prompt, refusal handling, best-so-far list |
-| Anthropic rate limit or spend cap mid-run | Check the tier today, pre-fund, second key as backup |
+| OpenAI rate limit or exhausted credit mid-run | Check the tier today, pre-fund, second key as backup |
 | Operator types a cue that references a location, breaching R6 | Cue box hidden by default, lint, confirm dialog; the log shows compliance |
 | Per-turn latency higher than budgeted | Measure at the trial; drop to `medium` effort or fewer turns |
 | Google Maps terms on automated analysis of imagery | Use the Static API with a key, keep Mapillary and national orthophotos as alternates; mention usage to the organisers if asked |

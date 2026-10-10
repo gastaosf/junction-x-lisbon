@@ -141,6 +141,16 @@ def _line(kind: str, text: str) -> dict[str, str]:
     return {"kind": kind, "text": text}
 
 
+def _hosted_action(action: Any) -> Any:
+    """What a hosted web search did, without the list of source URLs that comes with a search."""
+    if not isinstance(action, dict):
+        return action if action is not None else {}
+    what = action.get("query") or action.get("pattern") or ""
+    where = action.get("url") or ""
+    said = " ".join(str(v) for v in (action.get("type"), what and json.dumps(what, ensure_ascii=False), where) if v)
+    return said or action
+
+
 def _content_lines(content: Any) -> list[dict[str, str]]:
     if isinstance(content, str):
         return [_line("text", _clip(content, _TEXT_LIMIT))] if content.strip() else []
@@ -153,10 +163,12 @@ def _content_lines(content: Any) -> list[dict[str, str]]:
             lines.append(_line("thinking", _clip(block["thinking"], _TEXT_LIMIT)))
         elif kind == "text" and str(block.get("text") or "").strip():
             lines.append(_line("text", _clip(block["text"], _TEXT_LIMIT)))
-        elif kind in {"tool_use", "server_tool_use"}:
+        elif kind == "refusal" and str(block.get("refusal") or "").strip():
+            lines.append(_line("text", _clip(block["refusal"], _TEXT_LIMIT)))
+        elif kind == "server_tool_use":
+            lines.append(_line("tool", f"{block.get('name', '?')} {_clip(_hosted_action(block.get('input')))}"))
+        elif kind == "tool_use":
             lines.append(_line("tool", f"{block.get('name', '?')} {_clip(block.get('input', {}))}"))
-        elif isinstance(kind, str) and kind.endswith("_tool_result"):
-            lines.append(_line("result", kind.removesuffix("_tool_result") + " result"))
     return lines
 
 

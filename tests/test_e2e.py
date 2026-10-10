@@ -31,6 +31,7 @@ from eval.run_eval import Truth, load_exports, score_run
 from geoagent import runner as runner_module
 from geoagent.config import Settings
 from geoagent.eventlog import validate_export
+from geoagent.openai_client import from_response, to_input
 from geoagent.runner import RunManager, export_run, load_tasks
 from geoagent.schema import Label
 from geoagent.scoring import haversine_m
@@ -74,29 +75,32 @@ NOMINATIM_HIT = {
 }
 
 
-def tool_use(name: str, input_: dict[str, Any], id_: str) -> SimpleNamespace:
-    return SimpleNamespace(type="tool_use", id=id_, name=name, input=input_)
+def tool_use(name: str, input_: dict[str, Any], id_: str) -> dict[str, Any]:
+    return {
+        "type": "function_call",
+        "id": f"fc_{id_}",
+        "call_id": id_,
+        "name": name,
+        "arguments": json.dumps(input_),
+        "status": "completed",
+    }
 
 
-def thinking(text: str) -> SimpleNamespace:
-    return SimpleNamespace(type="thinking", thinking=text, signature="sig-fixture")
+def thinking(text: str) -> dict[str, Any]:
+    summary = [{"type": "summary_text", "text": text}]
+    return {"type": "reasoning", "id": "rs_fixture", "summary": summary, "encrypted_content": "enc-fixture"}
 
 
-def message(*blocks: Any) -> SimpleNamespace:
-    usage = SimpleNamespace(
-        input_tokens=4000,
-        output_tokens=300,
-        cache_creation_input_tokens=0,
-        cache_read_input_tokens=20000,
-        server_tool_use=None,
-    )
-    return SimpleNamespace(
-        id="msg_fixture",
-        model="claude-opus-5-5",
-        content=list(blocks),
-        stop_reason="tool_use",
-        stop_details=None,
-        usage=usage,
+def message(*items: dict[str, Any]) -> SimpleNamespace:
+    """A Responses API response of these output items, as the real client hands it to the loop."""
+    usage = {
+        "input_tokens": 24000,
+        "input_tokens_details": {"cached_tokens": 20000, "cache_write_tokens": 0},
+        "output_tokens": 300,
+        "output_tokens_details": {"reasoning_tokens": 120},
+    }
+    return from_response(
+        {"id": "resp_fixture", "model": "gpt-6.1-sol", "status": "completed", "output": list(items), "usage": usage}
     )
 
 
@@ -105,10 +109,10 @@ SCRIPTS: dict[str, list[SimpleNamespace]] = {
     SPECIAL_ID: [
         message(
             thinking("Scripted test fixture. Two candidate cities; zoom on the shop sign first."),
-            tool_use("view_crop", {"yaw": 350.0, "pitch": 5.0, "fov": 20.0, "enhance": True}, "toolu_a1"),
-            tool_use("update_candidates", {"hypotheses": [ALFAMA, RIBEIRA]}, "toolu_a2"),
+            tool_use("view_crop", {"yaw": 350.0, "pitch": 5.0, "fov": 20.0, "enhance": True}, "call_a1"),
+            tool_use("update_candidates", {"hypotheses": [ALFAMA, RIBEIRA]}, "call_a2"),
         ),
-        message(tool_use("search_places", SEARCH, "toolu_a3")),
+        message(tool_use("search_places", SEARCH, "call_a3")),
         message(
             tool_use(
                 "ask_multiple_choice",
@@ -117,7 +121,7 @@ SCRIPTS: dict[str, list[SimpleNamespace]] = {
                     "options": ["Narrow lane with tram rails and a blue-tiled cafe", "Wide granite quay on a river"],
                     "why_it_matters": "Option 1 confirms the first hypothesis, option 2 the second.",
                 },
-                "toolu_a4",
+                "call_a4",
             )
         ),
         message(
@@ -127,21 +131,21 @@ SCRIPTS: dict[str, list[SimpleNamespace]] = {
                     "hypotheses": [{**ALFAMA, "probability": 0.9}, {**RIBEIRA, "probability": 0.05}],
                     "reasoning_summary": "Scripted fixture: sign geocoded, operator confirmed the lane.",
                 },
-                "toolu_a5",
+                "call_a5",
             )
         ),
     ],
     RURAL_ID: [
-        message(tool_use("view_crop", {"yaw": 90.0, "pitch": -10.0, "fov": 60.0, "enhance": False}, "toolu_b1")),
+        message(tool_use("view_crop", {"yaw": 90.0, "pitch": -10.0, "fov": 60.0, "enhance": False}, "call_b1")),
         message(
-            tool_use("update_candidates", {"hypotheses": [SERRA]}, "toolu_b2"),
-            tool_use("search_places", {"query": "Serra plateau", "countrycodes": "", "viewbox": ""}, "toolu_b3"),
+            tool_use("update_candidates", {"hypotheses": [SERRA]}, "call_b2"),
+            tool_use("search_places", {"query": "Serra plateau", "countrycodes": "", "viewbox": ""}, "call_b3"),
         ),
         message(
             tool_use(
                 "submit_locations",
                 {"hypotheses": [SERRA], "reasoning_summary": "Scripted fixture: upland granite."},
-                "toolu_b4",
+                "call_b4",
             )
         ),
     ],
@@ -345,9 +349,11 @@ async def test_event_log_covers_the_run_in_order(finished_run: dict[str, Any]) -
     start = special["events"][0]["data"]
     assert start["panorama"]["filename"] == "pano_a.jpg" and len(start["panorama"]["sha256"]) == 64
     assert start["label"] == "Urban" and start["capture_timestamp"] == "20261011093000"
-    assert start["model"] == "claude-opus-5-5" and start["effort"] == "xhigh"
+    assert start["model"] == "gpt-6.1-sol" and start["effort"] == "xhigh"
+    assert start["request"]["reasoning"] == {"effort": "xhigh", "summary": "auto"}
+    assert start["request"]["prompt_cache_key"] == "geoagent-e2e-pano_a"
     assert "Regional cue playbook" in start["system_prompt"]
-    assert {t["name"] for t in start["tools"]} >= {"view_crop", "submit_locations", "web_search"}
+    assert {t.get("name") or t["type"] for t in start["tools"]} >= {"view_crop", "submit_locations", "web_search"}
 
     tools_called = [e["data"]["tool"] for e in special["events"] if e["type"] == "tool_call"]
     assert tools_called == ["view_crop", "update_candidates", "search_places", "ask_multiple_choice", "submit_locations"]
@@ -363,7 +369,18 @@ async def test_event_log_covers_the_run_in_order(finished_run: dict[str, Any]) -
     assert len(images) == 11 and all(len(b["sha256"]) == 64 and Path(b["path"]).is_file() for b in images)
     assert "base64" not in json.dumps(special["events"])
     response = next(e for e in special["events"] if e["type"] == "model_response")
-    assert response["data"]["content"][0]["type"] == "thinking" and response["data"]["usage"]["input_tokens"] == 4000
+    assert [b["type"] for b in response["data"]["content"]] == ["thinking", "tool_use", "tool_use"]
+    # the raw API items (and the encrypted reasoning in them) stay out of the log
+    assert not any("item" in b for b in response["data"]["content"])
+    assert "enc-fixture" not in json.dumps(special["events"])
+    assert response["data"]["usage"] == {
+        "input_tokens": 24000,
+        "cached_input_tokens": 20000,
+        "cache_write_tokens": 0,
+        "output_tokens": 300,
+        "reasoning_tokens": 120,
+        "web_search_requests": 0,
+    }
 
 
 async def test_mcq_went_through_the_operator_api(finished_run: dict[str, Any]) -> None:
@@ -380,7 +397,7 @@ async def test_mcq_went_through_the_operator_api(finished_run: dict[str, Any]) -
     # the click reached the model as the tool result of its own question
     last_call = finished_run["client"].calls[SPECIAL_ID][-1]["raw_messages"]
     reply = last_call[-1]["content"][0]
-    assert reply["type"] == "tool_result" and reply["tool_use_id"] == "toolu_a4"
+    assert reply["type"] == "tool_result" and reply["tool_use_id"] == "call_a4"
     assert "option 1" in reply["content"][0]["text"]
 
 
@@ -389,7 +406,7 @@ async def test_requests_are_cache_stable_and_append_only(finished_run: dict[str,
     for panorama_id, script in SCRIPTS.items():
         made = calls[panorama_id]
         assert len(made) == len(script)
-        assert len({c["fixed"] for c in made}) == 1  # system, tools and settings never change
+        assert len({c["fixed"] for c in made}) == 1  # instructions, tools and settings never change
         for earlier, later in zip(made, made[1:]):
             assert later["messages"][: len(earlier["messages"])] == earlier["messages"]
         for call in made:
@@ -401,10 +418,29 @@ async def test_requests_are_cache_stable_and_append_only(finished_run: dict[str,
         assert [b["type"] for b in parallel[:2]] == ["tool_result", "tool_result"]
 
     special, rural = calls[SPECIAL_ID][0]["params"], calls[RURAL_ID][0]["params"]
-    assert special["output_config"] == {"effort": "xhigh"} and rural["output_config"] == {"effort": "high"}
-    assert special["system"] == rural["system"] and special["tools"] == rural["tools"]
-    assert special["thinking"] == {"type": "adaptive", "display": "summarized"}
-    assert not {"tool_choice", "temperature", "top_p", "top_k"} & set(special)
+    assert special["reasoning"] == {"effort": "xhigh", "summary": "auto"}
+    assert rural["reasoning"] == {"effort": "high", "summary": "auto"}
+    assert special["instructions"] == rural["instructions"] and special["tools"] == rural["tools"]
+    assert special["store"] is False and "reasoning.encrypted_content" in special["include"]
+    # each conversation has its own cache partition, the same on every turn
+    assert special["prompt_cache_key"] != rural["prompt_cache_key"]
+    assert not {"tool_choice", "temperature", "top_p", "truncation", "previous_response_id"} & set(special)
+
+
+async def test_history_translates_to_a_valid_stateless_input(finished_run: dict[str, Any]) -> None:
+    """What the real client would send for the last request: every item echoed as it arrived,
+    every function call answered, images inside the outputs."""
+    for panorama_id, script in SCRIPTS.items():
+        sent = to_input(finished_run["client"].calls[panorama_id][-1]["raw_messages"], "original")
+        echoed = [i for i in sent if i.get("type") in {"reasoning", "function_call"}]
+        assert echoed == [b["item"] for response in script[:-1] for b in response.content]
+        calls = [i["call_id"] for i in sent if i.get("type") == "function_call"]
+        outputs = [i["call_id"] for i in sent if i.get("type") == "function_call_output"]
+        assert calls == outputs and len(calls) == len(set(calls))
+        assert sent[0]["role"] == "user" and sent[0]["content"][0]["type"] == "input_text"
+        crop = next(i for i in sent if i.get("type") == "function_call_output")
+        image = next(part for part in crop["output"] if part["type"] == "input_image")
+        assert image["image_url"].startswith("data:image/jpeg;base64,") and image["detail"] == "original"
 
 
 async def test_only_the_mock_geocoder_was_called(finished_run: dict[str, Any]) -> None:

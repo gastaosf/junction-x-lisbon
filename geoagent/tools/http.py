@@ -279,7 +279,7 @@ def google_settled(response: CachedResponse) -> bool:
 
 
 def encode_jpeg(image: np.ndarray, *, max_side: int = MAX_IMAGE_SIDE) -> bytes:
-    """JPEG bytes, downscaled so neither side exceeds max_side (the API's many-image limit)."""
+    """JPEG bytes, downscaled so neither side exceeds max_side (the harness's per-image size cap)."""
     height, width = image.shape[:2]
     scale = max_side / max(height, width)
     if scale < 1:

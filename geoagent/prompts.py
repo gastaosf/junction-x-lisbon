@@ -135,8 +135,9 @@ _TOOLS_WEB = """\
 them as a starting point for verification rather than as the camera position. Restrict by country \
 codes or a viewbox when you already know the region; an unrestricted search for a common name returns \
 the wrong one more often than the right one.
-- web_search and web_fetch are for resolving what you read: a business name plus a town, a phone \
-number, a festival poster, a company on a van, the route of a named trail.
+- web_search is for resolving what you read: a business name plus a town, a phone number, a \
+festival poster, a company on a van, the route of a named trail. It can open a result page itself \
+when the search results alone do not settle the question.
 - streetview_lookup returns street-level imagery near a point at compass headings you choose, with the \
 imagery's own coordinate and date. Ask for headings that correspond to distinctive directions in the \
 panorama. Coverage is absent on tracks and in fields, and imagery can be years old, so allow for new \

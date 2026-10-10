@@ -37,11 +37,11 @@ def touch(directory: Path, *names: str) -> None:
 
 
 def submit_message() -> SimpleNamespace:
-    block = SimpleNamespace(
-        type="tool_use", id="toolu_s", name="submit_locations", input={"hypotheses": [HYP], "reasoning_summary": "ok"}
-    )
-    usage = SimpleNamespace(input_tokens=1000, output_tokens=100, cache_creation_input_tokens=0, cache_read_input_tokens=0)
-    return SimpleNamespace(id="msg", model="claude-opus-5-5", content=[block], stop_reason="tool_use", stop_details=None, usage=usage)
+    block = {
+        "type": "tool_use", "id": "call_s", "name": "submit_locations", "input": {"hypotheses": [HYP], "reasoning_summary": "ok"}
+    }
+    usage = {"input_tokens": 1000, "cached_input_tokens": 0, "cache_write_tokens": 0, "output_tokens": 100}
+    return SimpleNamespace(id="resp", model="gpt-6.1-sol", content=[block], stop_reason="tool_use", stop_details=None, usage=usage)
 
 
 class SubmittingClient:
@@ -215,7 +215,7 @@ async def test_run_and_export(tmp_path: Path, pano_dir: Path) -> None:
     for path in paths[:3]:
         doc = json.loads(path.read_text())
         assert validate_export(doc) == []
-        assert doc["team"] == "albatross" and doc["config"]["model"] == "claude-opus-5-5"
+        assert doc["team"] == "albatross" and doc["config"]["model"] == "gpt-6.1-sol"
         assert doc["panorama"]["panorama_id"] == path.stem and doc["panorama"]["sha256"]
         assert doc["totals"]["stop_reason"] == "submitted"
 

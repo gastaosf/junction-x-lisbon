@@ -34,23 +34,53 @@ LIVE_BUDGET = Budget(effort="high", soft_deadline_s=150, hard_deadline_s=210, ma
 
 
 class Pricing(BaseModel):
-    """USD per million tokens for claude-opus-5-5."""
+    """USD per million tokens, Standard tier. The defaults are gpt-6.1-sol's."""
 
-    input: float = 4.0
-    output: float = 20.0
-    cache_write: float = 5.0
-    cache_read: float = 0.20
+    input: float = 2.0
+    cached_input: float = 0.10
+    cache_write: float = 2.50
+    output: float = 10.0
     web_search_per_1k: float = 10.0
+    long_context_threshold: int = 272_000  # input tokens; above it the whole request is re-priced
+    long_input_multiplier: float = 2.0  # applies to input, cached input and cache writes
+    long_output_multiplier: float = 1.5
+
+
+_GPT_5_6_SOL = Pricing(input=4.0, cached_input=0.40, cache_write=5.0, output=20.0)
+MODEL_PRICING: dict[str, Pricing] = {
+    "gpt-6.1-sol": Pricing(),
+    "gpt-6-astra": Pricing(input=10.0, cached_input=1.0, cache_write=12.50, output=50.0),
+    "gpt-6-sol": Pricing(input=2.0, cached_input=0.20, cache_write=2.50, output=10.0),
+    "gpt-6-luna": Pricing(input=0.10, cached_input=0.01, cache_write=0.125, output=0.50),
+    "gpt-5.6-sol": _GPT_5_6_SOL,
+    "gpt-5.6": _GPT_5_6_SOL,  # alias
+    # No cache-write surcharge on this model: a write is billed as plain input.
+    "gpt-5.5": Pricing(input=5.0, cached_input=0.50, cache_write=5.0, output=30.0),
+}
+
+
+def pricing_for(model: str) -> Pricing:
+    """Exact id, else the longest id it extends with a dated suffix ("gpt-5.5-2026-04-23"), else
+    the default. The suffix must start with a digit: "gpt-5.5-pro" is another model at another
+    price, and an unknown model gets the default rather than a relative's."""
+    if model in MODEL_PRICING:
+        return MODEL_PRICING[model]
+    snapshots = [k for k in MODEL_PRICING if model.startswith(k + "-") and model[len(k) + 1 : len(k) + 2].isdigit()]
+    return MODEL_PRICING[max(snapshots, key=len)] if snapshots else Pricing()
 
 
 class Settings(BaseModel):
     # model
-    model: str = "claude-opus-5-5"
-    # Thinking cannot be disabled on this model and counts toward max_tokens; 64K is the published
-    # starting point at xhigh effort. Requests are streamed, so the size carries no HTTP-timeout risk.
+    model: str = "gpt-6.1-sol"
+    # Sent as max_output_tokens. Reasoning cannot be switched off on this model and counts toward
+    # it: a turn that spends the whole allowance reasoning comes back with no tool call at all.
+    # Requests are streamed, so the size carries no HTTP-timeout risk.
     max_tokens: int = 64_000
+    # Sent with every image. "original" keeps a view at the size the harness rendered it; "high"
+    # would shrink the larger ones to a fixed patch budget, and "auto" differs between models.
+    image_detail: Literal["low", "high", "original", "auto"] = "original"
     # Per-chunk read timeout on the streamed response: a stalled connection is retried after this.
-    api_read_timeout_s: float = 120.0
+    api_read_timeout_s: float = 60.0
     pricing: Pricing = Pricing()
     standard: Budget = STANDARD_BUDGET
     special: Budget = SPECIAL_BUDGET
@@ -97,8 +127,6 @@ class Settings(BaseModel):
     esri_export_url: str = (
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export"
     )
-    web_search_max_uses: int = 20
-    web_fetch_max_uses: int = 10
 
     # keys (optional; a missing key disables that backend, never raises)
     google_maps_api_key: str | None = None
@@ -128,6 +156,7 @@ def load_settings(**overrides) -> Settings:
     base = Settings()
     env: dict = {
         "model": os.environ.get("GEOAGENT_MODEL") or base.model,
+        "image_detail": os.environ.get("GEOAGENT_IMAGE_DETAIL") or base.image_detail,
         "allow_web": _env_bool("ALLOW_WEB", base.allow_web),
         "allow_duplicates": _env_bool("ALLOW_DUPLICATES", base.allow_duplicates),
         "hedge": _env_bool("HEDGE", base.hedge),
@@ -145,6 +174,7 @@ def load_settings(**overrides) -> Settings:
         "mapillary_token": os.environ.get("MAPILLARY_TOKEN") or None,
     }
     env.update({k: v for k, v in overrides.items() if v is not None})
+    env.setdefault("pricing", pricing_for(env["model"]))  # after the overrides: --model changes the rates
     return Settings(**env)
 
 
