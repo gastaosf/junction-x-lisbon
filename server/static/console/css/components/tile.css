@@ -1,0 +1,1098 @@
+/* Panorama tile (js/components/tile.js): the full tile of UI-SPEC 5.5 in its "tiles" and "focus"
+ * densities, the one-row "board" form of 5.4, and the parts the focus screen composes itself
+ * (.tile-head, .tile-time, .tile-conf, .tile-hyps, .tile-answer).
+ *
+ * Layout follows the width of the tile, not of the window (container queries), because the same
+ * tile sits in a two-column dashboard at 1280 px and across a 4K projector. The parts do not
+ * depend on being inside a .tile.
+ *
+ * Colour: tokens only. Nothing here uses --penalty: a tile reports what a penalty cost, it is not
+ * a penalised control. Every coloured state also has a word or an icon beside it. */
+
+/* ------------------------------------------------------------------ frame */
+
+.tile-tiles,
+.tile-focus {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+  padding: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  background: var(--panel);
+  container: tile / inline-size;
+}
+
+.tile-tiles.is-special,
+.tile-focus.is-special {
+  border-color: var(--special);
+}
+
+/* A waiting question outranks everything else on the frame; the status badge says it in words. */
+.tile-tiles[data-status="awaiting_mcq"],
+.tile-focus[data-status="awaiting_mcq"] {
+  border-color: var(--attn);
+  box-shadow: 0 0 0 1px var(--attn);
+}
+
+.tile-tiles.is-waiting > :not(.tile-waiting),
+.tile-focus.is-waiting > :not(.tile-waiting) {
+  display: none;
+}
+
+.tile:not(.is-waiting) > .tile-waiting {
+  display: none;
+}
+
+.tile-waiting {
+  padding: var(--s-5) var(--s-3);
+}
+
+.tile-slot {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* A slot whose content is hidden must not leave a gap of its own. */
+.tile-slot-flags:not(:has(> :not([hidden]))),
+.tile-notices:not(:has(> :not([hidden]))),
+.tile-mcq:not(:has(> :not([hidden]))) {
+  display: none;
+}
+
+.tile-empty {
+  padding: var(--s-2) 0;
+  font-size: var(--fs-sm);
+}
+
+/* ------------------------------------------------------------------ head */
+
+.tile-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.tile-special {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 0.2rem 0.65rem;
+  border-radius: var(--r-2);
+  background: var(--special-bg);
+  color: var(--special-ink);
+  font-size: var(--fs-sm);
+  font-weight: 750;
+  letter-spacing: 0.09em;
+}
+
+.tile-head-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-1) var(--s-3);
+  min-width: 0;
+}
+
+/* The id, badges and file name wrap among themselves, so the multiplier keeps its corner. */
+.tile-head-main {
+  display: flex;
+  flex: 1 1 14rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-1) var(--s-2);
+  min-width: 0;
+}
+
+.tile-id {
+  color: var(--text-strong);
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.tile-id-link {
+  color: inherit;
+}
+
+.tile-id-link:hover {
+  text-decoration: none;
+}
+
+.tile-id-link:hover .tile-id {
+  text-decoration: underline;
+}
+
+.tile-file {
+  max-width: 18rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile-file:empty {
+  display: none;
+}
+
+.tile-mult {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0 0.5em;
+  margin-left: auto;
+}
+
+.tile-mult-value {
+  color: var(--text-strong);
+  font-family: var(--mono);
+  font-size: var(--fs-lg);
+  font-weight: 700;
+}
+
+/* A reduced multiplier is a warning about the score, written out beside it: not a control. */
+.tile-mult.is-reduced .tile-mult-value,
+.tile-mult-value.is-reduced {
+  color: var(--warn);
+}
+
+.tile-mult-detail {
+  color: var(--dim);
+  font-size: var(--fs-sm);
+}
+
+/* ------------------------------------------------------------------ time bar */
+
+.tile-time {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.tile-time-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.1rem var(--s-3);
+  min-width: 0;
+  font-size: var(--fs-sm);
+}
+
+.tile-clock {
+  color: var(--text-strong);
+  font-family: var(--mono);
+  font-size: var(--fs-md);
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.tile-phase,
+.tile-turn,
+.tile-spend {
+  color: var(--dim);
+}
+
+.tile-turn,
+.tile-spend {
+  white-space: nowrap;
+}
+
+.tile-spend:empty {
+  display: none;
+}
+
+/* A word in the warning colour inside a part that sets its own colour (base .warn-text loses). */
+.tile-spend.warn-text,
+.tile-answer .warn-text,
+.tile-b-answer.warn-text {
+  color: var(--warn);
+}
+
+.tile-time[data-tone="warn"] .tile-phase {
+  color: var(--warn);
+}
+
+.tile-time[data-tone="bad"] .tile-phase {
+  color: var(--bad);
+}
+
+.tile-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  min-width: 0;
+  margin-left: auto;
+  color: var(--dim);
+}
+
+.tile-live[data-tone="bad"] {
+  color: var(--bad);
+}
+
+.tile-live[data-tone="warn"],
+.tile-live[data-tone="attn"] {
+  color: var(--warn);
+}
+
+.tile-live-text {
+  overflow-wrap: anywhere;
+}
+
+.tile-bar {
+  position: relative;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--panel-3);
+}
+
+.tile-bar-fill {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.5s linear;
+}
+
+.tile-time[data-tone="warn"] .tile-bar-fill {
+  background: var(--warn);
+}
+
+.tile-time[data-tone="bad"] .tile-bar-fill {
+  background: var(--bad);
+}
+
+.tile-time[data-tone="done"] .tile-bar-fill,
+.tile-time[data-tone="dim"] .tile-bar-fill {
+  background: var(--line-strong);
+}
+
+.tile-bar-mark {
+  position: absolute;
+  top: -0.2rem;
+  bottom: -0.2rem;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--text-strong);
+}
+
+.tile-bar-mark.is-cue {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  margin-left: 0;
+  background: var(--dim);
+}
+
+.tile-bar-scale {
+  position: relative;
+  height: 1.15rem;
+  color: var(--dim);
+  font-size: var(--fs-xs);
+}
+
+.tile-bar-label {
+  position: absolute;
+  top: 0;
+  white-space: nowrap;
+}
+
+.tile-bar-label.is-soft {
+  transform: translateX(-50%);
+}
+
+.tile-bar-label.is-hard {
+  right: 0;
+}
+
+.tile-window {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.1rem 0.5rem;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  font-weight: 650;
+}
+
+.tile-window-icon {
+  display: inline-flex;
+}
+
+.tile-window[data-tone="ok"] {
+  color: var(--text-strong);
+}
+
+.tile-window[data-tone="warn"] {
+  color: var(--warn);
+}
+
+.tile-window[data-tone="bad"] {
+  color: var(--bad);
+}
+
+.tile-window[data-tone="dim"] {
+  color: var(--dim);
+  font-weight: 500;
+}
+
+.tile-window-detail {
+  font-weight: 400;
+}
+
+/* The board row: clock, bar and one line. */
+.tile-time.is-compact {
+  gap: 0.2rem;
+}
+
+.tile-time.is-compact .tile-clock {
+  font-size: var(--fs-sm);
+}
+
+.tile-time.is-compact .tile-turn,
+.tile-time.is-compact .tile-live-text {
+  display: none;
+}
+
+.tile-time.is-compact .tile-bar {
+  height: 0.4rem;
+}
+
+.tile-time.is-compact .tile-window {
+  flex-wrap: nowrap;
+  font-size: var(--fs-xs);
+  font-weight: 550;
+}
+
+.tile-time.is-compact .tile-window-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ flags and notices */
+
+.tile-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-2);
+  min-width: 0;
+}
+
+.tile-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  max-width: 100%;
+  min-height: 1.6rem;
+  padding: 0.05rem 0.55rem;
+  border: 1px solid var(--warn-line);
+  border-radius: var(--r-2);
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: var(--fs-sm);
+  font-weight: 650;
+}
+
+.tile-flag[data-tone="bad"] {
+  border-color: var(--bad-line);
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+
+.tile-flag[data-tone="attn"] {
+  border-color: var(--attn);
+  background: var(--attn);
+  color: var(--attn-ink);
+}
+
+a.tile-flag:hover {
+  border-color: currentColor;
+  text-decoration: none;
+}
+
+.tile-flag-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile-notices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.tile-notice-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+  min-width: 0;
+}
+
+.tile-notice-text {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
+.tile-notice-actions {
+  display: inline-flex;
+  gap: var(--s-2);
+}
+
+.tile-notice-actions:empty {
+  display: none;
+}
+
+/* ------------------------------------------------------------------ body */
+
+.tile-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+.tile-col,
+.tile-part {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tile-col {
+  gap: var(--s-3);
+}
+
+.tile-part {
+  gap: var(--s-2);
+}
+
+.tile-viewer {
+  height: clamp(13rem, 44cqw, 27rem);
+  overflow: hidden;
+  border-radius: var(--r-2);
+  background: var(--bg-sunk);
+}
+
+.tile-map {
+  height: clamp(14rem, 34cqw, 23rem);
+  overflow: hidden;
+  border-radius: var(--r-2);
+}
+
+.tile-part-stream {
+  flex: 1 1 auto;
+}
+
+/* The stream fills what the taller column leaves, and never shrinks below a readable list. */
+.tile-stream {
+  display: flex;
+  flex: 1 1 20rem;
+  flex-direction: column;
+  min-height: 20rem;
+}
+
+.tile-stream-note {
+  font-size: var(--fs-sm);
+}
+
+@container tile (min-width: 44rem) {
+  .tile-main {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .tile-viewer,
+  .tile-mcq {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Focus density with room to spare: the panorama beside the map, then hypotheses, answer and
+   stream in three columns. The two column wrappers dissolve so their parts join one grid. */
+@container tile (min-width: 68rem) {
+  .tile-focus .tile-main {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-template-areas:
+      "v v v v v v v m m m m m"
+      "q q q q q q q q q q q q"
+      "h h h h a a a a s s s s";
+  }
+
+  .tile-focus .tile-col {
+    display: contents;
+  }
+
+  .tile-focus .tile-viewer {
+    grid-area: v;
+    height: clamp(20rem, 30cqw, 46rem);
+  }
+
+  .tile-focus .tile-mcq {
+    grid-area: q;
+  }
+
+  .tile-focus .tile-part-map {
+    grid-area: m;
+  }
+
+  .tile-focus .tile-map {
+    flex: 1 1 14rem;
+    height: auto;
+    min-height: 14rem;
+  }
+
+  .tile-focus .tile-part-hyps {
+    grid-area: h;
+  }
+
+  .tile-focus .tile-part-answer {
+    grid-area: a;
+  }
+
+  .tile-focus .tile-part-stream {
+    grid-area: s;
+  }
+
+  .tile-focus .tile-stream {
+    flex-basis: 26rem;
+    min-height: 26rem;
+  }
+}
+
+@container tile (min-width: 110rem) {
+  .tile-focus .tile-main {
+    grid-template-areas:
+      "v v v v v v v m m m m m"
+      "q q q q q q q q q q q q"
+      "h h h h a a a s s s s s";
+  }
+}
+
+/* ------------------------------------------------------------------ confidence line */
+
+.tile-conf {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem var(--s-3);
+  min-width: 0;
+  font-size: var(--fs-sm);
+}
+
+.tile-conf-top {
+  color: var(--text-strong);
+  font-size: var(--fs-md);
+  font-weight: 700;
+}
+
+.tile-conf-gate {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile-conf-proxy {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 0.45em;
+  padding: 0.05rem 0.5rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-2);
+  cursor: help;
+}
+
+.tile-conf-proxy-label {
+  color: var(--dim);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.tile-conf-proxy-value {
+  color: var(--text-strong);
+  font-weight: 650;
+}
+
+/* ------------------------------------------------------------------ hypotheses */
+
+.tile-hyps {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  container: tilehyps / inline-size;
+}
+
+.tile-hyp {
+  display: grid;
+  grid-template-columns: 3.4rem minmax(0, 1fr) 5.2rem auto 1.7rem;
+  grid-template-areas:
+    "prob label radius coords more"
+    "ev ev ev ev ev";
+  align-items: center;
+  gap: 0 var(--s-2);
+  padding: 0.3rem 0.4rem;
+  border-top: 1px solid var(--line);
+}
+
+.tile-hyp-header {
+  padding-block: 0.15rem;
+  border-top: 0;
+  color: var(--dim);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.tile-hyp-rows > .tile-hyp:hover,
+.tile-hyp.is-highlight {
+  background: var(--accent-soft);
+}
+
+.tile-hyp.is-highlight {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.tile-hyp-prob {
+  position: relative;
+  grid-area: prob;
+  padding-bottom: 0.2rem;
+  color: var(--text-strong);
+  font-weight: 700;
+}
+
+.tile-hyp-header .tile-hyp-prob {
+  padding-bottom: 0;
+  color: inherit;
+  font-weight: inherit;
+}
+
+.tile-hyp-meter {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  max-width: 100%;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+.tile-hyp-label {
+  display: -webkit-box;
+  grid-area: label;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.tile-hyp-meta {
+  display: contents;
+}
+
+.tile-hyp-radius {
+  grid-area: radius;
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+.tile-hyp-coords {
+  display: inline-flex;
+  grid-area: coords;
+  align-items: center;
+  gap: 0.15rem;
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+.tile-hyp-more {
+  display: inline-flex;
+  grid-area: more;
+  justify-content: flex-end;
+}
+
+.tile-hyp-evidence {
+  grid-area: ev;
+  padding: 0.3rem 0 0.15rem calc(3.4rem + var(--s-2));
+  font-size: var(--fs-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@container tilehyps (max-width: 31rem) {
+  .tile-hyp {
+    grid-template-columns: 3.2rem minmax(0, 1fr) 1.7rem;
+    grid-template-areas:
+      "prob label more"
+      "meta meta meta"
+      "ev ev ev";
+    row-gap: 0.1rem;
+  }
+
+  .tile-hyp-meta {
+    display: flex;
+    grid-area: meta;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0 var(--s-3);
+    min-width: 0;
+  }
+
+  .tile-hyp-header {
+    display: none;
+  }
+
+  .tile-hyp-rows > .tile-hyp:first-child {
+    border-top: 0;
+  }
+
+  .tile-hyp-evidence {
+    padding-left: 0;
+  }
+}
+
+/* ------------------------------------------------------------------ answer list */
+
+.tile-answer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-strong);
+  border-radius: var(--r-2);
+  background: var(--panel-2);
+}
+
+/* Amber while it can still change, green once it is the answer of record; the title and the
+   mark beside it say the same in words. */
+.tile-answer[data-state="provisional"],
+.tile-answer[data-state="stranded"] {
+  border-left-color: var(--provisional);
+}
+
+.tile-answer[data-state="final"] {
+  border-left-color: var(--final);
+}
+
+.tile-answer-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-1) var(--s-2);
+}
+
+.tile-answer-title {
+  color: var(--text);
+}
+
+.tile-answer-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  font-size: var(--fs-sm);
+  font-weight: 650;
+}
+
+.tile-answer[data-state="provisional"] .tile-answer-state {
+  color: var(--provisional);
+}
+
+.tile-answer[data-state="stranded"] .tile-answer-state {
+  color: var(--warn);
+}
+
+.tile-answer[data-state="final"] .tile-answer-state {
+  color: var(--final);
+}
+
+.tile-copy-all {
+  width: auto;
+  min-width: 0;
+  margin-left: auto;
+  padding: 0 0.45rem;
+  gap: 0.3em;
+  font-size: var(--fs-xs);
+}
+
+.tile-answer-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.1rem var(--s-2);
+}
+
+.tile-answer-point {
+  color: var(--text-strong);
+  font-weight: 650;
+}
+
+.tile-answer-rows {
+  overflow-x: auto;
+}
+
+.tile-answer-table {
+  font-size: var(--fs-sm);
+}
+
+.tile-answer-table th,
+.tile-answer-table td {
+  white-space: nowrap;
+}
+
+.tile-answer-table th {
+  background: transparent;
+}
+
+.tile-answer-facts {
+  gap: 0.1rem var(--s-3);
+  font-size: var(--fs-sm);
+}
+
+/* ------------------------------------------------------------------ board row */
+
+.tile-board {
+  display: block;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--panel);
+  color: var(--text);
+  container: tileboard / inline-size;
+}
+
+a.tile-board:hover {
+  border-color: var(--line-strong);
+  background: var(--panel-2);
+  text-decoration: none;
+}
+
+.tile-board.is-special {
+  border-color: var(--special);
+  box-shadow: inset 3px 0 0 var(--special-bg);
+}
+
+.tile-board[data-status="awaiting_mcq"] {
+  border-color: var(--attn);
+  box-shadow: inset 3px 0 0 var(--attn);
+}
+
+.tile-board.is-waiting {
+  opacity: 0.6;
+}
+
+.tile-b-grid {
+  display: grid;
+  grid-template-columns:
+    5.2rem minmax(10rem, 1.3fr) 8.6rem minmax(11rem, 1.2fr) minmax(10rem, 1.6fr) 7.5rem
+    minmax(9rem, 1.3fr);
+  grid-template-areas: "thumb id status time top mult flags";
+  align-items: center;
+  gap: var(--s-1) var(--s-3);
+  padding: var(--s-2) var(--s-3);
+}
+
+.tile-board-header {
+  border-color: transparent;
+  background: transparent;
+  color: var(--dim);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.tile-board-header .tile-b-grid {
+  padding-block: 0;
+}
+
+.tile-b-thumb {
+  display: grid;
+  grid-area: thumb;
+  place-items: center;
+  width: 5.2rem;
+  aspect-ratio: 2 / 1;
+  overflow: hidden;
+  border-radius: var(--r-1);
+  background: var(--bg-sunk);
+  color: var(--dim);
+}
+
+.tile-board-header .tile-b-thumb {
+  height: 0;
+  aspect-ratio: auto;
+  background: transparent;
+}
+
+.tile-b-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tile-b-noimg,
+.tile-b-thumb.is-missing .tile-b-img {
+  display: none;
+}
+
+.tile-b-thumb.is-missing .tile-b-noimg {
+  display: inline-flex;
+}
+
+.tile-b-id {
+  display: flex;
+  grid-area: id;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.tile-b-id-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.5rem;
+  min-width: 0;
+}
+
+.tile-board .tile-id {
+  font-size: var(--fs-md);
+}
+
+.tile-b-status {
+  display: flex;
+  grid-area: status;
+  flex-wrap: wrap;
+  gap: var(--s-1);
+}
+
+.tile-b-time {
+  grid-area: time;
+  min-width: 0;
+}
+
+.tile-b-top {
+  display: flex;
+  grid-area: top;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tile-b-top-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+  min-width: 0;
+}
+
+.tile-b-top-prob {
+  color: var(--text-strong);
+  font-weight: 700;
+}
+
+.tile-b-top-prob:empty {
+  display: none;
+}
+
+.tile-b-top-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile-b-answer {
+  font-weight: 650;
+}
+
+.tile-b-answer:empty {
+  display: none;
+}
+
+.tile-b-answer[data-state="provisional"] {
+  color: var(--provisional);
+}
+
+.tile-b-answer[data-state="stranded"] {
+  color: var(--warn);
+}
+
+.tile-b-answer[data-state="final"] {
+  color: var(--final);
+}
+
+.tile-b-mult {
+  display: flex;
+  grid-area: mult;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 0;
+  text-align: right;
+}
+
+.tile-b-ledger {
+  overflow-wrap: anywhere;
+}
+
+.tile-b-ledger:empty {
+  display: none;
+}
+
+.tile-b-flags {
+  grid-area: flags;
+  min-width: 0;
+}
+
+.tile-b-flags .tile-flag {
+  min-height: 1.4rem;
+  font-size: var(--fs-xs);
+}
+
+/* A side rail: the same row folded onto a few lines, the id on one of its own. The multiplier
+   sits beside the top hypothesis, whose label can give way: beside the status it was covered by
+   the "awaiting MCQ" badge in a narrow rail. */
+@container tileboard (max-width: 58rem) {
+  .tile-b-grid {
+    grid-template-columns: 4.4rem minmax(0, 1fr) auto;
+    grid-template-areas:
+      "thumb id id"
+      "thumb status status"
+      "top top mult"
+      "time time time"
+      "flags flags flags";
+    align-items: start;
+  }
+
+  .tile-b-thumb {
+    width: 4.4rem;
+  }
+
+  .tile-board .tile-file {
+    display: none;
+  }
+
+  .tile-b-mult {
+    flex-direction: row-reverse;
+    align-items: baseline;
+    gap: 0.5em;
+  }
+
+  .tile-b-flags:not(:has(.tile-flag)) {
+    display: none;
+  }
+
+  .tile-board-header {
+    display: none;
+  }
+}

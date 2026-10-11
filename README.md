@@ -1,4 +1,4 @@
-# geoagent
+# astrolabio
 
 Panorama localisation agent for the Albatroz Challenge (JunctionX Lisbon 2026). It takes a 360°
 equirectangular panorama with its `Urban` / `non-Urban` label and capture timestamp, and returns
@@ -44,12 +44,60 @@ Special One flag it parsed, followed by warnings (a defaulted label, an unreadab
 several Special Ones). Check that table: a wrong label silently changes the scoring function, the
 allocator and the fallback point.
 
+## Web console
+
+```
+uv run python cli.py serve        # opens http://127.0.0.1:8000
+```
+
+One command starts everything; the rest happens in the browser (design: `UI-SPEC.md`):
+
+- **Runs**: every run under `runs/`, live or on disk. A run that was killed is listed as
+  interrupted and "Rebuild exports" finishes it from its logs.
+- **New run**: drop the panoramas (or a zip, or pick a folder on the machine), check the parsed
+  labels, timestamps and Special One in the preflight table, choose a preset (autonomous batch,
+  scoring run, live on stage, evaluation, custom) and launch.
+- **Run dashboard and panorama focus**: the tiles with the three penalised controls (below), stop
+  and finalize, the reasoning stream, and a replay of any finished panorama.
+- **Submission**: the checklist, `answers.csv`, and the zip to hand in.
+- **Evaluation** and **Settings**: build and label the ground-truth set, score and compare runs;
+  keys, defaults for new runs, health.
+
+Options: `--port N`, `--no-open` (do not open the browser), and the old ones. With a directory,
+`serve data/scoring --special <file>` also launches that run at once, as it always did; it and
+every other run still going are finalised and exported when the server stops.
+
+The server binds 127.0.0.1 only, answers only under its own address (`127.0.0.1`, `localhost` or
+`[::1]` with the port) and refuses state-changing requests from any other origin, so another page
+open in the same browser cannot charge a penalty. A second laptop can join only after "LAN
+access" is switched on in Settings and the server restarted: the join link with its token is
+printed on this terminal, and the directory browser and key editing are off while it is on.
+`--host` with a non-loopback address is refused otherwise.
+
+- **Demo and rehearsal without the API:** `ASTROLABIO_FAKE_MODEL=1 uv run python cli.py serve` runs
+  every panorama with a scripted model: no model call, no cost, made-up answers. Every preset can
+  be launched, so the scoring hour (phase guide, questions, cues, freeze, submission) and the
+  stage view can be rehearsed without spending. Such a run keeps its preset but is a `training`
+  run marked as fake: the submission checklist fails on "Real model" and the zip asks before it is
+  built. The health page does not contact OpenAI, Google or Mapillary while the demo model is on
+  ("not checked: demo model"). The variable must be in the command's own environment; in `.env`
+  it is ignored with a warning.
+- **A scratch copy for trying things:** `RUNS_DIR`, `CACHE_DIR`, `ASTROLABIO_DATA_DIR` (uploaded
+  sets and saved settings), `ASTROLABIO_EVAL_DATA_DIR` (the evaluation set) and `ASTROLABIO_ENV_FILE`
+  (the file Settings writes keys to) each move one directory or file, so a second server can run
+  beside the real one without touching its runs, its evaluation labels or `.env`.
+- **The old page:** `uv run python cli.py serve data/scoring --special <file> --legacy` starts the
+  single-run server exactly as it was before the console. Inside the console the same page is at
+  `/legacy` for any run the server is holding.
+
 ## Commands
+
+The CLI keeps working for scripts; nothing exists only there.
 
 | Run | Command |
 |---|---|
 | Training / trial set, autonomous | `uv run python cli.py batch data/set1 --concurrency 6 --no-human` |
-| Scoring run, with the operator UI | `uv run python cli.py serve data/scoring --special <file>` then open http://127.0.0.1:8000 |
+| Scoring run, launched from the terminal | `uv run python cli.py serve data/scoring --special <file>` (the console opens on it) |
 | Live on-stage panorama | `uv run python cli.py run pano.jpg --label Urban --live` |
 | One panorama | `uv run python cli.py run pano.jpg --label non-Urban [--special]` |
 | Rebuild exports from the logs | `uv run python cli.py export runs/<run_id> [--embed-images]` |
@@ -63,8 +111,8 @@ Stopping and restarting:
 
 - Ctrl-C, `kill` (SIGTERM) and a closed terminal (SIGHUP) all finalise every panorama and write
   the exports before the process exits. `serve` gives open browser tabs 3 seconds to disconnect.
-- After a hard kill (`kill -9`, power loss) `cli.py export runs/<run_id>` rebuilds the files from
-  the logs. A panorama that never reached a final submission is exported with its last
+- After a hard kill (`kill -9`, power loss) "Rebuild exports" in the console, or
+  `cli.py export runs/<run_id>`, rebuilds the files from the logs. A panorama that never reached a final submission is exported with its last
   `update_candidates` list, re-stamped with the penalties recorded in the log; its `stop_reason`
   is `recovered_from_provisional` and the row keeps a "no final_submission" problem so that it
   is looked at.
@@ -86,7 +134,7 @@ Every panorama always ends with exactly 10 entries: the agent's submission, else
 
 ## Answer construction
 
-`geoagent/allocate.py` turns the agent's hypotheses into the list (SPEC 7.1): by default the single
+`astrolabio/allocate.py` turns the agent's hypotheses into the list (SPEC 7.1): by default the single
 point with the highest expected theta, ten times. Two details go beyond the SPEC's pseudo-code and
 reduce to it exactly in its own setting:
 
@@ -120,15 +168,15 @@ reduce to it exactly in its own setting:
 - Nothing is stored on the API side (`store=False`): the whole history, reasoning items included,
   is re-sent on every turn, and prompt caching makes the repeated prefix cheap. Each panorama has
   its own `prompt_cache_key`. `cost_usd` in the log is an estimate at the Standard-tier prices in
-  `geoagent/config.py`, including $10 per 1,000 `web_search` calls.
+  `astrolabio/config.py`, including $10 per 1,000 `web_search` calls.
 - One `overpass_query` is limited to 60 s across both servers; a timeout moves on to the mirror
   instead of retrying. `search_places` waits at most 30 s for Nominatim before using Photon.
 
-## Operator UI
+## Operator controls
 
-`serve` starts the runs and the page together. Each tile shows the panorama, the hypotheses on a
-map, the provisional list, the live multiplier, elapsed time and the reasoning stream; the Special
-One is listed first. The only inputs that reach the agent are the three penalised ones:
+Each tile of a run's dashboard shows the panorama, the hypotheses on a map, the provisional list,
+the live multiplier, elapsed time and the reasoning stream; the Special One is listed first. The
+only inputs that reach the agent are the three penalised ones:
 
 1. **MCQ buttons** (x0.95, charged when the agent asks). They appear only when the agent calls
    `ask_multiple_choice`; no answer within 90 s returns "no answer; proceed". The per-tile
@@ -154,11 +202,12 @@ the agent is writing its submission is delivered first (the submission is held f
 cue in the last 30 s before the hard deadline is refused at no cost; a cue that was charged but
 could not be delivered is logged as `human_cue_undelivered` and keeps its penalty.
 
-"Finalize now", "Finalize all" and "Export JSON" are harness controls and send nothing to the
-agent. Exports are written when all runs end, after every geocode and finalize, and when the
-server stops, so the files on disk always match what the page shows. The page loads
-Leaflet and map tiles from the internet; without them only the map is missing. There is no
-authentication, so keep the server on 127.0.0.1.
+"Finalize now", "Finalize all", "Stop run", "Retry" and the exports are harness controls and send
+nothing to the agent. Exports are written when a run ends, after every geocode and finalize, and
+when the server stops, so the files on disk always match what the page shows. Every penalised
+request carries an idempotency key: a double click or a retry after a timeout charges once, and
+"Check" on a cue runs the lint without leaving any trace in the log. Map tiles are the only thing
+the page loads from the internet; without them the maps show a coordinate grid.
 
 ## Flags for the organiser questions (SPEC section 13)
 
@@ -171,19 +220,19 @@ Set these in `.env`. The defaults are what we build to until the organisers answ
 | Q3 | Are duplicate coordinates scored at every rank? | `ALLOW_DUPLICATES=false` gives 10 distinct points | duplicates |
 | Q4 | Log schema and file layout | One JSON per panorama; `EMBED_IMAGES=true` or `export --embed-images` inlines images | by reference |
 | Q5 | Is the timestamp UTC or local? | No flag: `sun_position` evaluates both and reports it as a weak prior | both |
-| Q6 | Is theta = 2 / (1 + d/scale)? | No flag: constants in `geoagent/scoring.py` and `Label.scale_m` | yes |
+| Q6 | Is theta = 2 / (1 + d/scale)? | No flag: constants in `astrolabio/scoring.py` and `Label.scale_m` | yes |
 | Q7 | Are MCQs about candidate places allowed? | `MCQ_ALLOWED=false`, `MAX_MCQ=0`, or the per-tile toggle | allowed, 3 max |
 | Q8 | Do label and timestamp count as a cue? | No flag: they are passed as task input | no |
-| Q9 | What is an indirect location reference? | No flag: `geoagent/cuelint.py` blocks toponyms, countries, regions, demonyms, languages | strict |
+| Q9 | What is an indirect location reference? | No flag: `astrolabio/cuelint.py` blocks toponyms, countries, regions, demonyms, languages | strict |
 | Q10 | When does the clock start; can we resubmit? | `GLOBAL_WATCHDOG_S` finalises everything; exports can be rebuilt at any time | 3000 s |
 | Q11 | Answer format | No flag: `answers.csv`, `lat,lng`, decimal WGS84, 6 decimals | as shown |
 | Q12 | Rules for the live panorama | `--live` budget (`Settings.live`), autonomous | 210 s hard deadline |
 
-Other settings (`HEDGE`, `NO_HUMAN`, `TEAM_NAME`, `RUNS_DIR`, `CACHE_DIR`, `GEOAGENT_MODEL`,
-`GEOAGENT_IMAGE_DETAIL`, `API_READ_TIMEOUT_S`) are listed in `.env.example`; budgets, `max_tokens`
+Other settings (`HEDGE`, `NO_HUMAN`, `TEAM_NAME`, `RUNS_DIR`, `CACHE_DIR`, `ASTROLABIO_MODEL`,
+`ASTROLABIO_IMAGE_DETAIL`, `API_READ_TIMEOUT_S`) are listed in `.env.example`; budgets, `max_tokens`
 (sent as `max_output_tokens`), prices, prior points and service URLs are fields of `Settings` in
-`geoagent/config.py`. The default model is `gpt-6.1-sol` at effort `high` (`xhigh` for the Special
-One); `GEOAGENT_MODEL=gpt-6-astra` selects the stronger model at five times the price.
+`astrolabio/config.py`. The default model is `gpt-6.1-sol` at effort `high` (`xhigh` for the Special
+One); `ASTROLABIO_MODEL=gpt-6-astra` selects the stronger model at five times the price.
 
 ## Before the scoring run
 
@@ -219,13 +268,13 @@ One); `GEOAGENT_MODEL=gpt-6-astra` selects the stronger model at five times the 
 - At the trial, on the venue network, read `image_payload_chars` and `latency_ms` from the
   `model_request` / `model_response` events of one run. The whole image history is re-uploaded on
   every turn; the initial views are encoded at JPEG quality 80 to limit that, at the sizes SPEC 6.2
-  fixes. If turns are slow because of upload, lower `INITIAL_JPEG_QUALITY` in `geoagent/pano.py`.
+  fixes. If turns are slow because of upload, lower `INITIAL_JPEG_QUALITY` in `astrolabio/pano.py`.
 - Watch for `api_retry` events with `error_class: APITimeoutError` during long reasoning turns. If a
   healthy stream is being cut, raise `API_READ_TIMEOUT_S`: the 60 s default is five times the
   longest silence seen in four measured streams (11 s inside reasoning, 4 s inside a hosted search),
   the API documents no bound, and effort `max` was not measured.
 - Brief the operators: the cue lint is a backstop, cues and questions only work on running tiles,
   and a geocode ends the panorama.
-- Have a team member check the regional playbook in `geoagent/prompts.py` against Plonk It,
+- Have a team member check the regional playbook in `astrolabio/prompts.py` against Plonk It,
   geotips.net and geometas; it was drafted from memory (SPEC 6.4).
 - Post `docs/sample_export.json` to the organisers' Discord to have the log format confirmed.

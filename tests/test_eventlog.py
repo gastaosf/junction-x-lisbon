@@ -6,8 +6,8 @@ import re
 import threading
 from pathlib import Path
 
-from geoagent.eventlog import SCHEMA_VERSION, EventLog, export_panorama, validate_export
-from geoagent.penalties import PenaltyLedger
+from astrolabio.eventlog import SCHEMA_VERSION, EventLog, export_panorama, validate_export
+from astrolabio.penalties import PenaltyLedger
 
 ENVELOPE_KEYS = [
     "schema_version",

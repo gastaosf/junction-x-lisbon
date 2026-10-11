@@ -112,7 +112,7 @@ The model proposes weighted hypotheses; code builds the final list. The model ne
 **Stack:** Python 3.11+, `openai` (async), `pydantic`, `opencv-python`, `numpy`, `Pillow`, `httpx`, `pvlib` or `astral`, FastAPI with server-sent events and one static HTML page (Leaflet map), `typer` CLI.
 
 ```
-geoagent/
+astrolabio/
   config.py        # model, effort, budgets, keys, feature flags
   pano.py          # equirect -> rectilinear, overview with yaw ruler, initial view set
   prompts.py       # frozen system prompt: cue playbook, scoring economics

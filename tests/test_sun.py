@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from geoagent.tools import sun
-from geoagent.tools.sun import (
+from astrolabio.tools import sun
+from astrolabio.tools.sun import (
     candidate_readings,
     compass_name,
     parse_timestamp,

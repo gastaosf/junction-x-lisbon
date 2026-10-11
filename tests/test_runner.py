@@ -16,10 +16,10 @@ import pytest
 from typer.testing import CliRunner
 
 import cli
-from geoagent.config import Budget, Settings
-from geoagent.eventlog import validate_export
-from geoagent.runner import RunManager, export_run, load_tasks
-from geoagent.schema import Label
+from astrolabio.config import Budget, Settings
+from astrolabio.eventlog import validate_export
+from astrolabio.runner import RunManager, export_run, load_tasks
+from astrolabio.schema import Label
 
 HYP = {"lat": 38.7223, "lng": -9.1393, "probability": 0.8, "radius_m": 40.0, "label": "Baixa", "evidence": "tram"}
 FAST = Budget(effort="high", soft_deadline_s=600, hard_deadline_s=840, max_turns=5, max_spend_usd=8.0)
@@ -339,7 +339,7 @@ async def test_export_run_works_from_logs_alone_and_reports_problems(tmp_path: P
 @pytest.fixture
 def cli_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     runs = tmp_path / "runs"
-    for name in ("ALLOW_WEB", "HEDGE", "NO_HUMAN", "EMBED_IMAGES", "ALLOW_DUPLICATES", "PENALTY_SCOPE", "GEOAGENT_MODEL"):
+    for name in ("ALLOW_WEB", "HEDGE", "NO_HUMAN", "EMBED_IMAGES", "ALLOW_DUPLICATES", "PENALTY_SCOPE", "ASTROLABIO_MODEL"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("RUNS_DIR", str(runs))
     monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))

@@ -1,0 +1,197 @@
+/* Charts (js/components/charts.js): SVG marks themed through variables.
+ *
+ * Series palette: six hues in a fixed order (blue, orange, aqua, yellow, violet, red). The order
+ * is the colour-blind safety mechanism: neighbouring slots stay apart under protanopia and
+ * deuteranopia in both themes, so do not reorder or insert. There is deliberately no magenta
+ * (reserved for penalised controls) and no pure green (reserved for "final" and "ok"). Past four
+ * lines charts.js also varies the dash pattern, so colour never carries identity alone. */
+
+:root,
+[data-theme="dark"] {
+  --chart-1: #3987e5;
+  --chart-2: #d95926;
+  --chart-3: #199e70;
+  --chart-4: #c98500;
+  --chart-5: #9085e9;
+  --chart-6: #e66767;
+}
+
+[data-theme="light"] {
+  --chart-1: #2a78d6;
+  --chart-2: #eb6834;
+  --chart-3: #1baf7a;
+  --chart-4: #eda100;
+  --chart-5: #6250d6;
+  --chart-6: #e34948;
+}
+
+/* The chrome tokens are resolved on the chart itself, not on :root, so a chart inside a
+ * container with its own theme (the stage view) picks up that container's colours. */
+.chart {
+  --chart-surface: var(--panel, #151b23);
+  --chart-grid: var(--line, #2b3440);
+  --chart-ink: var(--text, #dbe2ea);
+  --chart-muted: var(--dim, #8492a3);
+  --chart-accent: var(--accent, #58a6ff);
+
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: var(--chart-min-height, 11rem);
+  color: var(--chart-ink);
+  font-size: var(--chart-font, 0.6875rem);
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-plot {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Absolutely placed so the SVG's own size can never feed back into the measured plot size. */
+.chart-svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  border-radius: 4px;
+  outline: none;
+  touch-action: pan-y;
+}
+.chart-svg:focus-visible { outline: 2px solid var(--chart-accent); outline-offset: 3px; }
+.chart.is-pickable .chart-svg { cursor: pointer; }
+.chart.is-empty .chart-svg { visibility: hidden; }
+
+.chart-empty {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--chart-grid);
+  border-radius: 6px;
+  color: var(--chart-muted);
+  font-size: 0.75rem;
+  font-style: italic;
+}
+.chart.is-empty .chart-empty { display: flex; }
+
+/* ---- axes: recessive, solid hairlines; text in text tokens, never in a series colour ---- */
+
+.chart-svg text {
+  fill: var(--chart-muted);
+  font-size: 1em;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+.chart-svg .chart-axis-label { font-weight: 600; letter-spacing: 0.02em; }
+.chart-gridline { stroke: var(--chart-grid); stroke-width: 1; opacity: 0.6; shape-rendering: crispEdges; }
+.chart-axis { stroke: var(--chart-muted); stroke-width: 1; opacity: 0.7; shape-rendering: crispEdges; }
+
+/* ---- marks ---- */
+
+.chart-c1 { --c: var(--chart-1); }
+.chart-c2 { --c: var(--chart-2); }
+.chart-c3 { --c: var(--chart-3); }
+.chart-c4 { --c: var(--chart-4); }
+.chart-c5 { --c: var(--chart-5); }
+.chart-c6 { --c: var(--chart-6); }
+
+.chart-line {
+  fill: none;
+  stroke: var(--c, var(--chart-1));
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  transition: opacity 120ms;
+}
+/* Round caps would close the gaps of a dash pattern. */
+.chart-line[stroke-dasharray] { stroke-linecap: butt; }
+/* Scatter `diagonal`: the y = x reference, quieter than any data mark. */
+.chart-diagonal { fill: none; stroke: var(--chart-axis, var(--dim, #8492a3)); stroke-width: 1.5; stroke-dasharray: 5 5; opacity: 0.8; pointer-events: none; }
+.chart-line.is-dim { opacity: 0.18; }
+
+.chart-bar { fill: var(--c, var(--chart-1)); }
+.chart-bar.is-active { filter: brightness(1.18); }
+
+/* The ring in the surface colour keeps a dot legible where it crosses a line or another dot. */
+.chart-dot { fill: var(--c, var(--chart-1)); stroke: var(--chart-surface); stroke-width: 2; }
+.chart-dot-hover { stroke-width: 2; }
+.chart-ring { fill: none; stroke: var(--chart-ink); stroke-width: 1.5; pointer-events: none; }
+
+.chart-band { fill: var(--chart-ink); opacity: 0.07; pointer-events: none; }
+.chart-band-selected { fill: var(--chart-accent); opacity: 0.22; }
+
+/* ---- annotations: vertical marks, hover crosshair, caller-driven cursor ---- */
+
+.chart-mark { stroke: var(--chart-muted); stroke-width: 1; shape-rendering: crispEdges; }
+.chart-svg .chart-mark-label { fill: var(--chart-ink); font-size: 0.92em; }
+.chart-mark.chart-mark-candidates { stroke: var(--chart-accent); }
+.chart-mark.chart-mark-final { stroke: var(--final, #3fb950); stroke-width: 2; }
+.chart-mark.chart-mark-soft_deadline { stroke: var(--warn, #d29922); }
+.chart-mark.chart-mark-error { stroke: var(--bad, #f85149); }
+/* Human interactions differ by pattern, not by a colour of their own. */
+.chart-mark.chart-mark-human { stroke: var(--chart-ink); stroke-dasharray: 4 3; }
+
+.chart-crosshair { stroke: var(--chart-muted); stroke-width: 1; pointer-events: none; shape-rendering: crispEdges; }
+.chart-cursor-line { stroke: var(--chart-ink); stroke-width: 1.5; fill: var(--chart-ink); stroke-linejoin: round; pointer-events: none; }
+.chart-layer-hover, .chart-layer-cursor { pointer-events: none; }
+
+/* ---- legend ---- */
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.125rem 0.875rem;
+  max-height: 4.2em;
+  overflow-y: auto;
+  color: var(--chart-muted);
+}
+.chart-legend[hidden] { display: none; }
+.chart-legend-item { display: inline-flex; align-items: center; gap: 0.375rem; min-width: 0; max-width: 100%; cursor: default; }
+.chart-legend-key { flex: none; width: 1.5rem; height: 0.625rem; overflow: visible; }
+.chart-legend-name { overflow: hidden; max-width: 18rem; color: var(--chart-ink); text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- hover read-out ---- */
+
+.chart-tip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  max-width: min(22rem, 85%);
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--line, #2b3440);
+  border-radius: 6px;
+  background: var(--panel-2, #1c232d);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
+  color: var(--chart-ink);
+  font-size: 0.75rem;
+  pointer-events: none;
+}
+.chart-tip[hidden] { display: none; }
+.chart-tip-title { margin-bottom: 0.125rem; overflow: hidden; color: var(--chart-muted); text-overflow: ellipsis; white-space: nowrap; }
+.chart-tip-row { display: flex; align-items: baseline; gap: 0.4rem; min-width: 0; }
+.chart-tip-key { flex: none; align-self: center; width: 0.75rem; height: 3px; border-radius: 2px; background: var(--c, var(--chart-1)); }
+.chart-tip-value { flex: none; font-weight: 650; }
+.chart-tip-label { overflow: hidden; color: var(--chart-muted); text-overflow: ellipsis; white-space: nowrap; }
+
+@media (prefers-reduced-motion: reduce) {
+  .chart-line { transition: none; }
+}
+
+/* With forced colours every series would collapse to one ink: keep marks visible and let the
+ * legend, the dash patterns and the read-out carry identity. */
+@media (forced-colors: active) {
+  .chart-line { stroke: CanvasText; }
+  .chart-bar, .chart-dot, .chart-tip-key { fill: CanvasText; background: CanvasText; }
+  .chart-gridline, .chart-axis, .chart-mark, .chart-crosshair { stroke: GrayText; }
+  .chart-cursor-line { stroke: Highlight; fill: Highlight; }
+}

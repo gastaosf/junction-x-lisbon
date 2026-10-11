@@ -11,9 +11,9 @@ import httpx
 import pytest
 from PIL import Image
 
-from geoagent.config import Settings
-from geoagent.schema import Hypothesis, Label, PanoramaTask
-from geoagent.session import PanoramaSession
+from astrolabio.config import Settings
+from astrolabio.schema import Hypothesis, Label, PanoramaTask
+from astrolabio.session import PanoramaSession
 from server.app import STATIC_DIR, create_app, digest_event
 
 CUE = "The road has a double white centre line and the poles are concrete with a square section."
@@ -406,7 +406,7 @@ async def test_failed_export_does_not_fail_the_geocode(tmp_path: Path) -> None:
 async def test_geocode_after_the_run_rewrites_the_files_that_get_submitted(tmp_path: Path) -> None:
     """All panoramas final and exported; a last-resort geocode at T+40 must reach the files on
     disk without anyone pressing Export."""
-    from geoagent.runner import RunManager
+    from astrolabio.runner import RunManager
 
     settings = Settings(runs_dir=tmp_path / "runs", mcq_timeout_s=5.0)
     image = tmp_path / "pano.jpg"

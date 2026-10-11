@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from geoagent.config import Settings
-from geoagent.eventlog import export_panorama, validate_export
-from geoagent.schema import Hypothesis, Label, PanoramaTask
-from geoagent.session import HumanChannelError, McqRefused, PanoramaSession
-from geoagent.tools.base import ToolContext
-from geoagent.tools.candidates import run_ask_multiple_choice, run_submit_locations, run_update_candidates
+from astrolabio.config import Settings
+from astrolabio.eventlog import export_panorama, validate_export
+from astrolabio.schema import Hypothesis, Label, PanoramaTask
+from astrolabio.session import HumanChannelError, McqRefused, PanoramaSession
+from astrolabio.tools.base import ToolContext
+from astrolabio.tools.candidates import run_ask_multiple_choice, run_submit_locations, run_update_candidates
 
 LISBON = (38.722252, -9.139337)
 PORTO = (41.149610, -8.610990)

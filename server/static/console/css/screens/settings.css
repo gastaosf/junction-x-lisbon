@@ -1,0 +1,436 @@
+/*
+  Settings screen (UI-SPEC 5.10). Everything is prefixed `settings-`; cards, fields, switches,
+  badges, notices, tables and buttons come from base.css.
+  Layout: a side list of sections that stays in view, and one card per section.
+*/
+
+.settings-top:not(:empty) {
+  margin-bottom: var(--s-4);
+}
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr);
+  gap: var(--s-5);
+  align-items: start;
+  max-width: 110rem;
+  /* The screen keeps the section the operator asked for in place itself while content arrives
+     above it; the browser's own scroll anchoring would move the page a second time. */
+  overflow-anchor: none;
+}
+
+.settings-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------------ side list */
+
+.settings-nav {
+  position: sticky;
+  top: calc(var(--shell-h) + var(--s-4));
+  max-height: calc(100vh - var(--shell-h) - var(--s-6));
+  overflow-y: auto;
+}
+
+.settings-nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-nav-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-1) var(--s-2);
+  min-height: var(--control-h);
+  padding: var(--s-1) var(--s-3);
+  border-left: 3px solid transparent;
+  border-radius: 0 var(--r-2) var(--r-2) 0;
+  color: var(--text);
+  font-weight: 550;
+}
+
+.settings-nav-link:hover {
+  background: var(--panel-2);
+  text-decoration: none;
+}
+
+/* The section being read: a bar and a heavier weight as well as the colour. */
+.settings-nav-link[aria-current="true"] {
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text-strong);
+  font-weight: 700;
+}
+
+.settings-nav-mark:empty {
+  display: none;
+}
+
+/* ------------------------------------------------------------------ section cards */
+
+.settings-section {
+  scroll-margin-top: calc(var(--shell-h) + var(--s-4));
+}
+
+.settings-section > .card-head {
+  min-height: 3.2rem;
+}
+
+.settings-wait-line {
+  padding: var(--s-3) 0;
+}
+
+.settings-content p {
+  max-width: 62rem;
+}
+
+.settings-btn-mark {
+  display: inline-flex;
+}
+
+.settings-btn-mark:empty {
+  display: none;
+}
+
+.settings-switch-word {
+  min-width: 2.2em;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-plain-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  max-width: 62rem;
+  margin: 0;
+  padding-left: 1.3rem;
+}
+
+/* With something unsaved, the save bar stays at the bottom of the window while its section is on
+   screen, so a long form never hides that there is something to save. */
+.settings-savebar.is-dirty {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  border-top-color: var(--warn-line);
+  box-shadow: 0 -6px 14px -8px var(--backdrop);
+}
+
+.settings-savebar-text {
+  flex: 1 1 14rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-savebar-text > .icon {
+  color: var(--warn);
+}
+
+/* ------------------------------------------------------------------ keys */
+
+.settings-keys {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-key {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-4) 0;
+  border-top: 1px solid var(--line);
+}
+
+.settings-key:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.settings-key-name {
+  font-size: var(--fs-md);
+  font-weight: 650;
+}
+
+.settings-key-form {
+  max-width: 62rem;
+}
+
+.settings-key-input {
+  min-width: 12rem;
+}
+
+.settings-test-line > .icon {
+  margin-top: 0.15em;
+}
+
+.settings-test-line.is-ok > .icon {
+  color: var(--ok);
+}
+
+.settings-test-line.is-bad > .icon {
+  color: var(--bad);
+}
+
+.settings-test-line.is-warn > .icon {
+  color: var(--warn);
+}
+
+.settings-test-line.is-dim {
+  color: var(--dim);
+}
+
+/* ------------------------------------------------------------------ defaults form */
+
+.settings-group + .settings-group {
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--line);
+}
+
+.settings-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: var(--s-4) var(--s-4);
+  align-items: start;
+}
+
+/* The four numbers of one budget on one line, so the three budgets read as a table. */
+.settings-fields.is-budget {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.settings-field,
+.settings-dir {
+  padding-left: var(--s-3);
+  border-left: 2px solid var(--line);
+}
+
+.settings-field.is-wide {
+  grid-column: 1 / -1;
+}
+
+.settings-field.is-changed,
+.settings-dir.is-changed {
+  border-left-color: var(--warn);
+}
+
+.settings-field.invalid,
+.settings-dir.invalid {
+  border-left-color: var(--bad);
+}
+
+.settings-field-marks {
+  min-height: 1.5rem;
+}
+
+.settings-field > .settings-text,
+.settings-field > select,
+.settings-dir > input {
+  width: 100%;
+}
+
+.settings-number {
+  width: 9rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.settings-unit {
+  white-space: nowrap;
+}
+
+.settings-tools {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: var(--s-2) var(--s-4);
+}
+
+.settings-field-reset button {
+  min-height: 1.6rem;
+}
+
+/* ------------------------------------------------------------------ organiser answers */
+
+.settings-answers {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-answer {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: var(--s-3) var(--s-5);
+  padding: var(--s-4) 0 var(--s-4) var(--s-3);
+  border-top: 1px solid var(--line);
+  border-left: 2px solid transparent;
+}
+
+.settings-answer:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.settings-answer.is-changed {
+  border-left-color: var(--warn);
+}
+
+.settings-answer.invalid {
+  border-left-color: var(--bad);
+}
+
+.settings-answer-question {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.settings-note {
+  min-height: 4.2rem;
+}
+
+/* ------------------------------------------------------------------ directories */
+
+.settings-dirs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-4);
+}
+
+.settings-roots {
+  display: flex;
+  flex-direction: column;
+  max-width: 62rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--bg-sunk);
+}
+
+.settings-roots > li {
+  min-height: var(--control-h);
+  padding: var(--s-1) var(--s-3);
+  border-top: 1px solid var(--line);
+}
+
+.settings-roots > li:first-child {
+  border-top: 0;
+}
+
+.settings-root > .icon,
+.settings-root > .row > .icon {
+  color: var(--dim);
+}
+
+/* base.css gives every small button side padding, which leaves an icon-only one no room. */
+.settings-root .icon-btn {
+  padding: 0;
+}
+
+.settings-root.invalid {
+  box-shadow: inset 2px 0 0 var(--bad);
+}
+
+/* ------------------------------------------------------------------ health */
+
+.settings-services {
+  width: 100%;
+}
+
+.settings-services td:first-child {
+  min-width: 12rem;
+  max-width: 24rem;
+}
+
+.table-wrap.is-stale {
+  opacity: 0.6;
+}
+
+.settings-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--s-3);
+}
+
+.settings-stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+  padding: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--panel-2);
+}
+
+.settings-stat-value {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  color: var(--text-strong);
+  font-size: var(--fs-xl);
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.settings-stat.is-warn {
+  border-color: var(--warn-line);
+}
+
+.settings-stat.is-warn .settings-stat-value {
+  color: var(--warn);
+}
+
+.settings-stat.is-bad {
+  border-color: var(--bad-line);
+}
+
+.settings-stat.is-bad .settings-stat-value {
+  color: var(--bad);
+}
+
+/* ------------------------------------------------------------------ LAN access */
+
+.settings-join {
+  max-width: 62rem;
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--bg-sunk);
+}
+
+.settings-join-url {
+  border: 0;
+  background: transparent;
+  font-size: var(--fs-md);
+  user-select: all;
+}
+
+/* ------------------------------------------------------------------ this browser */
+
+.settings-prefs {
+  display: flex;
+  flex-direction: column;
+  max-width: 62rem;
+}
+
+.settings-pref {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--s-2) var(--s-5);
+  align-items: center;
+  padding: var(--s-3) 0;
+  border-top: 1px solid var(--line);
+}
+
+.settings-pref:first-child {
+  border-top: 0;
+  padding-top: 0;
+}

@@ -1,6 +1,6 @@
 import pytest
 
-from geoagent.cuelint import LintVerdict, lint_cue, normalise
+from astrolabio.cuelint import LintVerdict, lint_cue, normalise
 
 LEGITIMATE_CUES = [
     "look at the blue tiled building on the left; the bollards have a red reflector",

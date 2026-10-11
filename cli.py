@@ -1,4 +1,4 @@
-"""Command line entry point: run <pano> | batch <dir> | export <run_dir> | eval ... | serve [<dir>]."""
+"""Command line entry point: serve [<dir>] | run <pano> | batch <dir> | export <run_dir> | eval ..."""
 
 from __future__ import annotations
 
@@ -10,9 +10,14 @@ from typing import Any, Optional
 
 import typer
 
-from geoagent.config import Settings, load_settings
-from geoagent.runner import RunManager, describe_tasks, export_run, load_tasks
-from geoagent.schema import Label
+from astrolabio.config import Settings, load_settings
+from astrolabio.runner import RunManager, describe_tasks, export_run, load_tasks
+from astrolabio.schema import Label
+
+# Read here, before any command can load .env (nothing imported above does): only the
+# environment this process was started with may select the scripted demo model. A line left in
+# .env must not turn a scoring run into a demo.
+_FAKE_MODEL_AT_START = os.environ.get("ASTROLABIO_FAKE_MODEL")
 
 app = typer.Typer(add_completion=False, no_args_is_help=True, help=__doc__)
 
@@ -232,10 +237,99 @@ def _serve_blocking(manager: RunManager, host: str, port: int, concurrency: int 
             typer.echo(str(path))
 
 
+def _truthy(raw: Optional[str]) -> bool:
+    return (raw or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+async def _serve_console(
+    workspace: Any, host: str, port: int, launch: dict[str, Any] | None = None, *, open_url: str | None = None
+) -> None:
+    """Serve the console until the server stops. `launch` (the arguments of
+    `Workspace.launch_path`) starts that run once the port is bound, so a port that is taken
+    never leaves a paid run going with no page to operate it from."""
+    import uvicorn
+
+    from server.console import create_console_app
+    from server.middleware import is_loopback
+
+    # a LAN address named on the command line is the one the console answers under
+    lan_host = None if host == "0.0.0.0" or is_loopback(host) else host
+    console = create_console_app(workspace, port=port, lan_host=lan_host)
+    server = uvicorn.Server(_uvicorn_config(console, host, port))
+    failed: list[Exception] = []
+
+    async def once_started() -> None:
+        while not server.started:
+            await asyncio.sleep(0.05)
+        if launch is not None:
+            try:
+                started = await workspace.launch_path(**launch)
+            except Exception as exc:  # a server left running without the run it was started for helps nobody
+                failed.append(exc)
+                server.should_exit = True
+                return
+            typer.echo(f"run {started['run_id']} -> {workspace.runs_dir / started['run_id']}")
+        if open_url is not None:
+            import webbrowser
+
+            await asyncio.to_thread(webbrowser.open, open_url)
+
+    follow_up = asyncio.create_task(once_started())
+    try:
+        await server.serve()
+    finally:
+        follow_up.cancel()
+        # Finalise while the loop still runs, so every panorama gets its run_end. After Ctrl-C this
+        # task is already cancelled and only the synchronous first part happens; what is left is
+        # done by shutdown_sync once the loop has stopped.
+        await workspace.shutdown()
+    if failed:
+        raise failed[0]
+
+
+def _serve_console_blocking(
+    workspace: Any, host: str, port: int, launch: dict[str, Any] | None, *, open_url: str | None = None
+) -> None:
+    """Run the console until it stops, then finalise and export every run that was still going.
+    As in `_serve_blocking`, the last step is outside the event loop: what is awaited in the
+    loop's own cleanup is cancelled together with it."""
+    _terminate_like_ctrl_c()
+    try:
+        asyncio.run(_serve_console(workspace, host, port, launch, open_url=open_url))
+    finally:
+        for path in workspace.shutdown_sync()[-2:]:
+            typer.echo(str(path))
+
+
+def _serve_legacy(
+    directory: Optional[Path],
+    host: str,
+    port: int,
+    concurrency: Optional[int],
+    no_human: bool,
+    special: Optional[str],
+    label: Optional[str],
+    hedge: bool,
+    no_web: bool,
+    live: bool,
+    run_id: Optional[str],
+) -> None:
+    """The single-run server as it was before the console: one run fixed at start-up."""
+    manager = RunManager(_settings(no_human=no_human, hedge=hedge, no_web=no_web), run_id=run_id, live=live)
+    if directory is not None:
+        manager.add_tasks(_load(directory, special, label))
+        _warn_if_no_key()
+    typer.echo(f"run {manager.run_id}: {len(manager.sessions)} panorama(s) -> {manager.run_dir}")
+    typer.echo(f"operator UI: http://{host}:{port}")
+    _serve_blocking(manager, host, port, concurrency)
+
+
 @app.command()
 def serve(
     directory: Optional[Path] = typer.Argument(None, exists=True, help="Panorama directory (or one image) to run."),
-    host: str = typer.Option("127.0.0.1", "--host"),
+    host: Optional[str] = typer.Option(
+        None, "--host", help="Address to bind (default 127.0.0.1; a LAN address needs LAN access on in Settings)."
+    ),
     port: int = typer.Option(8000, "--port"),
     concurrency: Optional[int] = typer.Option(None, "--concurrency", min=1, help="Panoramas in parallel."),
     no_human: bool = typer.Option(False, "--no-human", help="Disable the three operator controls."),
@@ -245,15 +339,91 @@ def serve(
     no_web: bool = NoWebOption,
     live: bool = LiveOption,
     run_id: Optional[str] = RunIdOption,
+    no_open: bool = typer.Option(False, "--no-open", help="Do not open the console in the browser."),
+    legacy: bool = typer.Option(False, "--legacy", help="The old single-run server and page, as before the console."),
 ) -> None:
-    """Start the operator UI and run the panoramas behind it; exports are written when the runs end."""
-    manager = RunManager(_settings(no_human=no_human, hedge=hedge, no_web=no_web), run_id=run_id, live=live)
+    """Start the web console (runs, launch, operator controls, submission, evaluation, settings).
+
+    With a directory, that run is launched as well, as the command always did. Runs still going
+    when the server stops are finalised and exported."""
+    if legacy:
+        _serve_legacy(
+            directory, host or "127.0.0.1", port, concurrency, no_human, special, label, hedge, no_web, live, run_id
+        )
+        return
+
+    from server.middleware import is_loopback, lan_address
+    from server.workspace import Workspace
+
+    default_label = _parse_label(label)
     if directory is not None:
-        manager.add_tasks(_load(directory, special, label))
-        _warn_if_no_key()
-    typer.echo(f"run {manager.run_id}: {len(manager.sessions)} panorama(s) -> {manager.run_dir}")
-    typer.echo(f"operator UI: http://{host}:{port}")
-    _serve_blocking(manager, host, port, concurrency)
+        _load(directory, special, label)  # the parsed table, and exit 2 here rather than behind a started server
+    # Two overrides for trying the console out without touching real data: where the evaluation
+    # set lives, and which .env file the Settings screen writes keys to.
+    workspace = Workspace(
+        fake_model=_truthy(_FAKE_MODEL_AT_START),
+        eval_data_dir=os.environ.get("ASTROLABIO_EVAL_DATA_DIR") or None,
+        env_path=os.environ.get("ASTROLABIO_ENV_FILE") or None,
+    )
+    lan = workspace.store.lan()
+    if host is None:
+        host = "0.0.0.0" if lan["enabled"] else "127.0.0.1"
+    if not is_loopback(host) and not lan["enabled"]:
+        typer.echo(
+            f"error: --host {host} would open the console to the network. It has no login: switch on LAN "
+            "access in Settings (it adds a shared token) and restart, or bind a loopback address.",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
+    url = f"http://127.0.0.1:{port}"
+    open_url = None if no_open else url + "/"
+    typer.echo(f"astrolabio console: {url}")
+    if lan["enabled"]:
+        address = lan_address() if host == "0.0.0.0" else host
+        if is_loopback(host):
+            typer.echo("LAN access is on in Settings, but --host binds this machine only.")
+        elif address is None:
+            typer.echo("warning: LAN access is on, but this machine has no network address to share.", err=True)
+        else:
+            # The one place the token is shown: whoever can read this terminal may join.
+            typer.echo(f"join from another laptop: http://{address}:{port}/?token={lan['token']}")
+        open_url = None if no_open else f"{url}/?token={lan['token']}"
+    if workspace.fake_model:
+        typer.echo("ASTROLABIO_FAKE_MODEL is set: runs use the scripted demo model (no API calls, demo answers).")
+    elif _truthy(os.environ.get("ASTROLABIO_FAKE_MODEL")):
+        typer.echo("warning: ASTROLABIO_FAKE_MODEL in .env was ignored; set it on the command line for a demo.", err=True)
+    elif not os.environ.get("OPENAI_API_KEY"):
+        typer.echo(
+            "warning: OPENAI_API_KEY is not set; set it under Settings in the console. Until then every "
+            "panorama gets the harness fallback answer (the label's prior point).",
+            err=True,
+        )
+
+    launch = None
+    if directory is not None:
+        launch = {
+            "path": directory,
+            "special": special,
+            "label": default_label,
+            # None leaves the saved default in place; a flag can only switch a feature one way.
+            "settings_overrides": {
+                "no_human": True if no_human else None,
+                "hedge": True if hedge else None,
+                "allow_web": False if no_web else None,
+            },
+            "live": live,
+            "run_id": run_id,
+            "concurrency": concurrency,
+        }
+
+    from server.sets import ConsoleError
+
+    try:
+        _serve_console_blocking(workspace, host, port, launch, open_url=open_url)
+    except ConsoleError as exc:
+        typer.echo(f"error: {exc.message}", err=True)
+        raise typer.Exit(code=2) from None
 
 
 if __name__ == "__main__":

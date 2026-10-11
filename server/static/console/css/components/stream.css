@@ -1,0 +1,759 @@
+/* Reasoning stream (js/components/stream.js) and the event JSON tree it puts in the side panel.
+ *
+ * Height: the list is 25rem tall unless the caller sets --stream-h (createStream's `height`) or
+ * asks for `.stream.fill`, which takes the height of a flex or sized container.
+ *
+ * Rows have no margins and one border each, whatever their position: the windowing adds up the
+ * measured row heights, so a row must be as tall in the middle of the list as at its start.
+ *
+ * Colour: a line's kind is carried by its typeface and weight first (italic prose for reasoning,
+ * monospace for tools and results), by an icon and a word in the row head for errors and human
+ * entries, and only then by colour. Nothing here uses --penalty: a stream entry reports a cue or
+ * a question, it is not a penalised control. */
+
+.stream {
+  --stream-rule: var(--line);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--bg);
+  font-size: var(--fs-sm);
+}
+
+@supports (color: color-mix(in srgb, red 50%, blue)) {
+  .stream {
+    /* Rules between rows are quieter than the frame, or a dense list reads as a grid. */
+    --stream-rule: color-mix(in srgb, var(--line) 62%, transparent);
+  }
+}
+
+.stream.fill {
+  flex: 1 1 auto;
+  height: 100%;
+}
+
+/* ------------------------------------------------------------------ bar: chips and search */
+
+.stream-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2);
+  border-bottom: 1px solid var(--line);
+  border-radius: var(--r-2) var(--r-2) 0 0;
+  background: var(--panel);
+}
+
+.stream-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1);
+  min-width: 0;
+}
+
+.stream-chip {
+  min-height: 1.6rem;
+  padding: 0 0.55rem;
+  gap: 0.3em;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dim);
+  font-size: var(--fs-xs);
+  font-weight: 550;
+}
+
+.stream-chip:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.stream-chip .icon {
+  width: 1em;
+  height: 1em;
+}
+
+.stream-chip-count {
+  font-weight: 650;
+}
+
+.stream-chip[aria-pressed="true"] {
+  font-weight: 650;
+}
+
+/* A category with nothing in it stays where it is (the row must not reflow as events arrive). */
+.stream-chip.is-zero:not([aria-pressed="true"]) {
+  opacity: 0.55;
+}
+
+/* Errors are worth a glance even when the chip is off: the icon and the count are already there. */
+.stream-chip.cat-errors:not(.is-zero):not([aria-pressed="true"]) {
+  border-color: var(--bad-line);
+  color: var(--bad);
+}
+
+/* Wide enough for its placeholder, which states what the search covers (A12); in a narrow
+   column it wraps onto a row of its own. */
+.stream-search {
+  position: relative;
+  display: flex;
+  flex: 1 1 19rem;
+  align-items: center;
+  min-width: 12rem;
+}
+
+.stream-search > .icon {
+  position: absolute;
+  left: 0.5rem;
+  width: 1em;
+  height: 1em;
+  color: var(--dim);
+  pointer-events: none;
+}
+
+.stream-search-input {
+  width: 100%;
+  min-height: 1.7rem;
+  padding: 0.1rem 0.5rem 0.1rem 1.75rem;
+  font-size: var(--fs-sm);
+  text-overflow: ellipsis;
+}
+
+/* The box has its own clear button, with a label and a count beside it. */
+.stream-search-input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.stream-search-side {
+  position: absolute;
+  right: 0.15rem;
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding-left: var(--s-2);
+  background: var(--bg);
+}
+
+.stream-search-count {
+  color: var(--dim);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+.stream-search-clear.icon-btn {
+  width: 1.4rem;
+  min-width: 1.4rem;
+  min-height: 1.4rem;
+}
+
+/* ------------------------------------------------------------------ list */
+
+.stream-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: var(--stream-h, 25rem);
+  min-height: 0;
+}
+
+.stream.fill > .stream-body {
+  flex: 1 1 0;
+  height: auto;
+  min-height: 9rem;
+}
+
+.stream-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  /* The stream keeps the operator's place itself when rows above change height. */
+  overflow-anchor: none;
+  /* Reaching the end of the stream must not start scrolling the dashboard behind it. */
+  overscroll-behavior: contain;
+  border-radius: 0 0 var(--r-2) var(--r-2);
+}
+
+.stream-scroll:focus-visible {
+  outline-offset: -2px;
+}
+
+.stream-pad {
+  flex: none;
+}
+
+.stream-entry {
+  position: relative;
+  padding: 0.3rem var(--s-3) 0.45rem calc(var(--s-3) - 3px);
+  border-bottom: 1px solid var(--stream-rule);
+  border-left: 3px solid transparent;
+}
+
+.stream-entry.is-error {
+  border-left-color: var(--bad);
+}
+
+/* The crop whose footprint is under the pointer in the viewer. */
+.stream-entry.is-hot {
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.stream-entry.is-open {
+  border-left-color: var(--accent);
+  background: var(--panel);
+}
+
+/* The entry a link or the timeline pointed at. */
+.stream-entry.is-target {
+  border-left-color: var(--attn);
+  background: var(--warn-soft);
+  animation: stream-target 1.4s ease-out 1;
+}
+
+@keyframes stream-target {
+  from {
+    box-shadow: inset 0 0 0 2px var(--attn);
+  }
+  to {
+    box-shadow: inset 0 0 0 2px transparent;
+  }
+}
+
+/* Replay: what happened after the scrubber's position. */
+.stream-entry.is-future {
+  opacity: 0.45;
+}
+
+/* ------------------------------------------------------------------ entry head */
+
+.stream-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 1.6rem;
+}
+
+.stream-open {
+  flex: 1 1 auto;
+  justify-content: flex-start;
+  align-items: baseline;
+  gap: var(--s-2);
+  min-width: 0;
+  min-height: 1.45rem;
+  margin-left: -0.3rem;
+  padding: 0 0.3rem;
+  border-color: transparent;
+  border-radius: var(--r-1);
+  background: transparent;
+  color: var(--dim);
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  text-align: left;
+}
+
+.stream-open:hover:not(:disabled),
+.stream-open:focus-visible {
+  border-color: transparent;
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.stream-open:hover .stream-seq,
+.stream-open:focus-visible .stream-seq {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.stream-time {
+  flex: none;
+}
+
+.stream-kind {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.3em;
+  color: var(--text);
+  font-weight: 650;
+}
+
+.stream-kind .icon {
+  width: 1em;
+  height: 1em;
+  align-self: center;
+  color: var(--dim);
+}
+
+/* The answer of record: the same green as the final point on the map, with a check mark. */
+.stream-entry.is-final .stream-kind,
+.stream-entry.is-final .stream-kind .icon {
+  color: var(--final);
+}
+
+.cat-reasoning .stream-kind .icon,
+.cat-tools .stream-kind .icon,
+.cat-images .stream-kind .icon {
+  color: var(--accent);
+}
+
+.cat-human .stream-kind,
+.cat-human .stream-kind .icon {
+  color: var(--warn);
+}
+
+.is-error .stream-kind,
+.is-error .stream-kind .icon {
+  color: var(--bad);
+}
+
+.cat-harness .stream-kind {
+  color: var(--dim);
+}
+
+.stream-crop {
+  flex: none;
+  padding: 0 0.4rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--text);
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.stream-meta {
+  display: inline-flex;
+  flex: 0 1 auto;
+  gap: var(--s-2);
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.stream-seq {
+  flex: none;
+}
+
+/* Lower than the head's own min-height: the button comes and goes once the browser has measured
+   whether the clamp cuts anything, and that must never change the height of the row. */
+.stream-head > .stream-toggle {
+  flex: none;
+  min-height: 1.45rem;
+  padding: 0 0.3rem 0 0.45rem;
+  gap: 0.15em;
+  color: var(--accent);
+  font-size: var(--fs-xs);
+}
+
+.stream-toggle-mark {
+  display: inline-flex;
+}
+
+.stream-toggle .icon {
+  width: 1em;
+  height: 1em;
+}
+
+/* ------------------------------------------------------------------ lines */
+
+.stream-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-top: 0.1rem;
+}
+
+.stream-line {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
+/* Clamped until the entry is expanded (A12: the server sends reasoning whole; the clamp is here). */
+.stream-entry:not(.is-expanded) .stream-line {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.stream-entry:not(.is-expanded) .stream-line.kind-thinking,
+.stream-entry:not(.is-expanded) .stream-line.kind-text {
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+}
+
+.stream-entry.can-expand .stream-line {
+  cursor: pointer;
+}
+
+.stream-line.kind-thinking {
+  color: var(--thinking);
+  font-style: italic;
+}
+
+.stream-line.kind-text {
+  color: var(--text);
+}
+
+.stream-line.kind-tool,
+.stream-line.kind-result,
+.stream-line.kind-error {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+}
+
+.stream-line.kind-tool {
+  color: var(--text);
+}
+
+.stream-tool-name {
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.stream-line.kind-result {
+  color: var(--dim);
+}
+
+.stream-line.kind-error {
+  color: var(--bad);
+}
+
+.stream-line.kind-human {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.stream-line.kind-harness {
+  color: var(--dim);
+}
+
+/* A final answer is the one harness line worth full contrast. */
+.stream-entry.is-final .stream-line {
+  color: var(--text-strong);
+}
+
+.stream-mark {
+  border-radius: 2px;
+  background: var(--attn);
+  color: var(--attn-ink);
+  font-style: normal;
+}
+
+.stream-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35em;
+  color: var(--dim);
+  font-size: var(--fs-xs);
+}
+
+.stream-note .icon {
+  width: 1em;
+  height: 1em;
+}
+
+/* ------------------------------------------------------------------ thumbnails */
+
+.stream-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1);
+  margin-top: 0.3rem;
+}
+
+.stream-thumb {
+  position: relative;
+  flex: none;
+  height: 5.5rem;
+  min-width: 3rem;
+  min-height: 0;
+  max-width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--r-1);
+  background: var(--panel-2);
+  cursor: zoom-in;
+}
+
+.stream-thumb-img {
+  display: block;
+  flex: none;
+  width: auto;
+  max-width: none;
+  height: 100%;
+}
+
+/* The number drawn on this crop's footprint in the panorama viewer. */
+.stream-thumb-n {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  min-width: 1.35em;
+  padding: 0 0.3em;
+  border-radius: var(--r-1);
+  background: rgba(0, 0, 0, 0.72);
+  color: #ffffff;
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.stream-thumb.is-missing {
+  flex-direction: column;
+  gap: 0.2rem;
+  width: 5.5rem;
+  color: var(--dim);
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  cursor: default;
+  opacity: 1;
+}
+
+/* ------------------------------------------------------------------ overlays in the list */
+
+.stream-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  padding: var(--s-4);
+  overflow: auto;
+  border-radius: 0 0 var(--r-2) var(--r-2);
+  background: var(--bg);
+  color: var(--dim);
+  text-align: center;
+}
+
+.stream-empty-title {
+  color: var(--text);
+  font-size: var(--fs-md);
+  font-weight: 650;
+}
+
+.stream-empty .notice {
+  max-width: 34rem;
+  text-align: left;
+}
+
+/* In the flow, above the list: it takes room rather than cover the entries it is about. */
+.stream-alert {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-1) var(--s-3);
+  border-bottom: 1px solid var(--bad-line);
+  background: var(--panel);
+  color: var(--bad);
+  font-size: var(--fs-xs);
+}
+
+.stream-alert > .icon {
+  flex: none;
+  width: 1.1em;
+  height: 1.1em;
+}
+
+.stream-alert-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.stream-jump {
+  position: absolute;
+  bottom: var(--s-3);
+  left: 50%;
+  z-index: 2;
+  min-height: 1.9rem;
+  padding: 0 0.5rem 0 0.7rem;
+  transform: translateX(-50%);
+  border-color: var(--accent);
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: var(--shadow);
+  color: var(--accent-ink);
+  font-size: var(--fs-sm);
+  font-weight: 650;
+}
+
+.stream-jump:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.stream-jump > span:not(.stream-jump-count) {
+  padding-right: 0.25rem;
+}
+
+.stream-jump-count {
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  background: var(--accent-ink);
+  color: var(--accent);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+}
+
+/* ------------------------------------------------------------------ event JSON (side panel) */
+
+.stream-json {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+.stream-json-facts,
+.stream-json-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+}
+
+.stream-json-fact {
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+.stream-json-tools {
+  gap: var(--s-2);
+}
+
+/* dom.copyButton is a square icon button; here it carries its label. */
+.stream-copy.copy-btn {
+  width: auto;
+  min-height: 1.7rem;
+  padding: 0.1rem 0.55rem;
+  border-color: var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+
+.stream-copy.copy-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.stream-copy .copy-mark {
+  display: inline-flex;
+}
+
+.json-tree {
+  min-width: 0;
+  padding: var(--s-2) var(--s-3);
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--bg-sunk);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.55;
+}
+
+.json-children {
+  margin-left: 0.3rem;
+  padding-left: 0.7rem;
+  border-left: 1px solid var(--line);
+}
+
+.json-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+  color: var(--text);
+  list-style: none;
+}
+
+.json-summary::-webkit-details-marker {
+  display: none;
+}
+
+/* The disclosure mark is drawn here so that leaves can be indented by exactly its width. */
+.json-summary::before {
+  content: "";
+  flex: none;
+  align-self: center;
+  width: 0;
+  height: 0;
+  margin: 0 0.25rem 0 0.2rem;
+  border-top: 0.3rem solid transparent;
+  border-bottom: 0.3rem solid transparent;
+  border-left: 0.4rem solid var(--dim);
+  transition: transform 0.1s;
+}
+
+.json-branch[open] > .json-summary::before {
+  transform: rotate(90deg);
+}
+
+.json-summary:hover::before {
+  border-left-color: var(--text);
+}
+
+.json-summary:focus-visible {
+  outline-offset: 0;
+  border-radius: var(--r-1);
+}
+
+.json-leaf {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+  padding-left: 0.85rem;
+}
+
+.json-key {
+  flex: none;
+  color: var(--dim);
+}
+
+.json-count {
+  color: var(--dim);
+}
+
+.json-branch[open] > .json-summary > .json-count {
+  opacity: 0.6;
+}
+
+.json-value {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.json-string {
+  color: var(--text);
+}
+
+.json-number,
+.json-boolean {
+  color: var(--accent);
+}
+
+.json-null {
+  color: var(--dim);
+  font-style: italic;
+}
+
+button.json-more {
+  min-height: 1.4rem;
+  padding: 0 0.4rem;
+  color: var(--accent);
+  font-family: var(--sans);
+  font-size: var(--fs-xs);
+}

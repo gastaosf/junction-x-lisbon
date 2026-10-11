@@ -1,8 +1,8 @@
 import pytest
 
-from geoagent.allocate import AllocationResult, allocate, mcq_gate, value_at
-from geoagent.schema import Hypothesis, Label
-from geoagent.scoring import expected_value, haversine_m, theta
+from astrolabio.allocate import AllocationResult, allocate, mcq_gate, value_at
+from astrolabio.schema import Hypothesis, Label
+from astrolabio.scoring import expected_value, haversine_m, theta
 
 M_PER_DEG_LAT = 111_195.08
 BASE = (39.5, -8.0)

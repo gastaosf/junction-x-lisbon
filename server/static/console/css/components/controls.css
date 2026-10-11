@@ -1,0 +1,570 @@
+/*
+  Operator controls (js/components/controls.js): the MCQ panel, the control bar, the cue and
+  geocode drawers, the harness controls.
+
+  --penalty (magenta) appears in this file on purpose: MCQ, cue and geocode are the penalised
+  controls it is reserved for. The harness controls (questions switch, Finalize now, Retry,
+  Export JSON, the fallback acknowledgement) carry nothing to the agent and never use it.
+  Every state shown by colour here is also written out in words or carries an icon.
+*/
+
+/* ------------------------------------------------------------------ control 1: MCQ panel */
+
+.ctl-mcq {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+  padding: var(--s-3) var(--s-4);
+  border: 2px solid var(--penalty);
+  border-radius: var(--r-3);
+  background: var(--penalty-soft);
+}
+
+.ctl-mcq:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* A closed question: still readable for a while, visibly no longer waiting. */
+.ctl-mcq[data-mode="result"] {
+  border-style: dashed;
+  border-color: var(--penalty-line);
+  background: var(--panel-2);
+}
+
+.ctl-mcq-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+.ctl-mcq-question {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--fs-lg);
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.ctl-mcq-why {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin: 0;
+}
+
+.ctl-ring {
+  position: relative;
+  flex: none;
+  width: 3.7rem;
+  height: 3.7rem;
+}
+
+.ctl-ring-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.ctl-ring-track {
+  stroke: var(--line-strong);
+  stroke-width: 4;
+}
+
+.ctl-ring-arc {
+  stroke: var(--accent);
+  stroke-width: 4;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.25s linear;
+}
+
+.ctl-ring[data-level="warn"] .ctl-ring-arc {
+  stroke: var(--warn);
+}
+
+.ctl-ring[data-level="urgent"] .ctl-ring-arc {
+  stroke: var(--bad);
+}
+
+.ctl-ring-text {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-strong);
+  font-size: var(--fs-md);
+  font-weight: 700;
+}
+
+.ctl-ring[data-level="urgent"] .ctl-ring-text {
+  color: var(--bad);
+}
+
+.ctl-mcq-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.ctl-mcq-option {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+}
+
+/* The option text is what the operator has to read, so it keeps the text colour; the letter and
+   the border carry the penalty colour. */
+button.ctl-mcq-choice {
+  justify-content: flex-start;
+  gap: var(--s-3);
+  width: 100%;
+  min-height: 2.6rem;
+  padding: 0.45rem 0.7rem;
+  border-width: 2px;
+  background: var(--panel);
+  color: var(--text);
+  font-weight: 550;
+  text-align: left;
+  white-space: normal;
+}
+
+.ctl-mcq-letter {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border: 1px solid var(--penalty-line);
+  border-radius: var(--r-1);
+  color: var(--penalty);
+  font-family: var(--mono);
+  font-weight: 700;
+}
+
+.ctl-mcq-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ctl-mcq-mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--penalty);
+  font-size: var(--fs-sm);
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.ctl-mcq-option.is-chosen > button.ctl-mcq-choice,
+.ctl-mcq-option.is-marked > button.ctl-mcq-choice {
+  border-color: var(--penalty);
+  background: var(--penalty-soft);
+  color: var(--text-strong);
+}
+
+.ctl-mcq-option.is-chosen .ctl-mcq-letter,
+.ctl-mcq-option.is-marked .ctl-mcq-letter {
+  border-color: var(--penalty);
+  background: var(--penalty);
+  color: var(--penalty-ink);
+}
+
+/* Locked buttons stay readable: the question and what was chosen must still be legible. */
+button.ctl-mcq-choice:disabled {
+  opacity: 0.6;
+}
+
+.ctl-mcq-option.is-marked > button.ctl-mcq-choice:disabled {
+  opacity: 1;
+}
+
+.ctl-mcq-place {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-1) var(--s-2);
+  padding-left: calc(0.7rem + 2px + 1.7rem + var(--s-3));
+  font-size: var(--fs-sm);
+}
+
+.ctl-mcq-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+/* The one button on this panel that sends: full penalty colour, like a confirm dialog's. */
+button.ctl-mcq-send {
+  min-height: 2.4rem;
+  padding-inline: 1.1rem;
+  border-color: var(--penalty);
+  background: var(--penalty);
+  color: var(--penalty-ink);
+}
+
+.ctl-mcq-status {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.ctl-mcq-status-icon {
+  flex: none;
+  color: var(--dim);
+}
+
+.ctl-mcq-status[data-tone="ok"] .ctl-mcq-status-icon {
+  color: var(--ok);
+}
+
+.ctl-mcq-status[data-tone="warn"] .ctl-mcq-status-icon {
+  color: var(--warn);
+}
+
+.ctl-mcq[data-mode="result"] .ctl-mcq-status {
+  font-weight: 650;
+}
+
+.ctl-mcq-note {
+  margin: 0;
+}
+
+/* ------------------------------------------------------------------ the control bar */
+
+.ctl-bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.ctl-bar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--s-2) var(--s-4);
+  min-width: 0;
+}
+
+.ctl-human {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.ctl-autonomous {
+  display: flex;
+  align-items: center;
+  min-height: var(--control-h);
+}
+
+/* Inside the bar the harness controls lay themselves out as items of the bar's own row, so the
+   switch and the buttons sit beside the penalised buttons while an acknowledgement or a failure
+   takes the full width below them. */
+.ctl-bar-harness,
+.ctl-bar-harness > .ctl-harness {
+  display: contents;
+}
+
+.ctl-bar-harness > .ctl-harness > .ctl-harness-row {
+  flex: 1 1 18rem;
+}
+
+.ctl-bar-harness > .ctl-harness > .ctl-ack,
+.ctl-bar-harness > .ctl-harness > .ctl-failure {
+  flex: 1 1 100%;
+}
+
+/* The drawer of this button is open: the button now closes it. */
+button.ctl-trigger[aria-expanded="true"] {
+  border-color: var(--penalty);
+}
+
+.ctl-cost {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  font-weight: 550;
+  opacity: 0.85;
+}
+
+.ctl-drawers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.ctl-drawers:empty {
+  display: none;
+}
+
+.ctl-cuebox,
+.ctl-geobox,
+.ctl-harness {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+/* Why a control is disabled, always on screen (a tooltip on a disabled button is not enough). */
+.ctl-reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0;
+  color: var(--dim);
+  font-size: var(--fs-sm);
+  list-style: none;
+}
+
+.ctl-reason {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ctl-reason > .icon {
+  flex: none;
+  margin-top: 0.15em;
+}
+
+.ctl-reason-labels {
+  flex: none;
+  color: var(--text);
+  font-weight: 650;
+}
+
+.ctl-inline-reason {
+  min-width: 0;
+  color: var(--dim);
+  overflow-wrap: anywhere;
+}
+
+.row > .ctl-inline-reason {
+  flex: 1 1 14rem;
+}
+
+/* ------------------------------------------------------------------ drawers (cue, geocode) */
+
+.ctl-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--penalty-line);
+  border-left: 3px solid var(--penalty);
+  border-radius: var(--r-2);
+  background: var(--panel-2);
+}
+
+/* The rule that applies to the control, in view for as long as the control is open. */
+.ctl-rule {
+  margin: 0;
+  padding: var(--s-2) var(--s-3);
+  border-left: 3px solid var(--penalty-line);
+  border-radius: var(--r-1);
+  background: var(--penalty-soft);
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+}
+
+.ctl-cue-text {
+  min-height: 5.5rem;
+}
+
+.ctl-cue-count {
+  font-weight: 650;
+}
+
+.ctl-cue-check {
+  min-width: 0;
+}
+
+.ctl-problems {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+/* Offending words: underlined as well as tinted, so the mark does not depend on colour. */
+mark.ctl-lint-word,
+mark.ctl-lint-mark {
+  padding: 0 0.1em;
+  border-radius: 2px;
+  background: var(--bad-soft);
+  color: inherit;
+  font-weight: 650;
+  text-decoration: underline wavy var(--bad);
+  text-underline-offset: 0.2em;
+}
+
+.ctl-lint-mirror {
+  max-height: 9rem;
+  padding: var(--s-2) var(--s-3);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-1);
+  background: var(--bg);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.ctl-cues {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  margin: 0;
+  padding: 0;
+  font-size: var(--fs-sm);
+  list-style: none;
+}
+
+.ctl-cue-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-1) var(--s-2);
+  min-width: 0;
+}
+
+.ctl-confirm-text {
+  max-height: 11rem;
+  padding: var(--s-2) var(--s-3);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--bg-sunk);
+  color: var(--text-strong);
+}
+
+.dialog .ctl-rule,
+.dialog-body p {
+  margin: 0;
+}
+
+.ctl-consequences {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin: 0;
+  padding-left: 1.4rem;
+  font-weight: 550;
+}
+
+.ctl-geo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  align-items: start;
+  gap: var(--s-4);
+  min-width: 0;
+}
+
+.ctl-geo-place {
+  width: 100%;
+}
+
+.ctl-geo-coords {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-2);
+}
+
+.ctl-geo-coords input {
+  width: 100%;
+}
+
+.ctl-geo-agent {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-1);
+}
+
+.ctl-geo-map {
+  --geomap-min-height: 19rem;
+  position: relative;
+  min-width: 0;
+  height: 19rem;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+}
+
+/* ------------------------------------------------------------------ harness controls */
+
+.ctl-harness-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-2) var(--s-4);
+  min-width: 0;
+}
+
+/* Kept together: the buttons move below the switch as a group before they stack. */
+.ctl-harness-buttons {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--s-2);
+  max-width: 100%;
+  margin-left: auto;
+}
+
+.ctl-toggle {
+  display: flex;
+  flex: 1 1 14rem;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  max-width: 28rem;
+}
+
+.ctl-toggle label.switch {
+  min-height: var(--control-h);
+  font-weight: 550;
+}
+
+.ctl-toggle-count {
+  color: var(--dim);
+}
+
+.ctl-ack {
+  align-items: center;
+}
+
+.ctl-ack-icon {
+  display: inline-flex;
+  flex: none;
+}
+
+.ctl-ack.notice-warn .ctl-ack-icon {
+  color: var(--warn);
+}
+
+.ctl-ack.notice-info .ctl-ack-icon {
+  color: var(--accent);
+}
+
+.ctl-failure {
+  min-width: 0;
+}
+
+/* A disabled link has no href; keep it from looking clickable. */
+a.btn[aria-disabled="true"]:hover {
+  border-color: var(--line);
+}

@@ -1,0 +1,410 @@
+/* 360° panorama viewer (js/components/pano-viewer.js).
+ *
+ * The viewer fills its container: give the container a height. Everything drawn over the image
+ * (ruler, readout, buttons, footprints) is sized in em of --pv-font, so the stage view can scale
+ * the whole overlay by setting that one property on the container.
+ *
+ * Colours here are deliberately not the theme tokens. The chrome sits on arbitrary imagery, not
+ * on the page: it keeps one dark translucent surface with light ink in both themes, because the
+ * light theme's dark accent and dark text would vanish on a night street. The viewer therefore
+ * looks the same on a light page as on a dark one.
+ */
+
+.pano-viewer {
+  --pv-font: var(--fs-xs, 0.846rem);
+  --pv-surface: rgba(8, 11, 15, 0.74);
+  --pv-surface-hover: rgba(30, 38, 48, 0.9);
+  --pv-edge: rgba(255, 255, 255, 0.16);
+  --pv-ink: #e8edf2;
+  --pv-ink-dim: #a3afbc;
+  --pv-shade: rgba(4, 6, 9, 0.72);
+  --pv-highlight: #6cb6ff;
+  --pv-focus: #8cc4ff;
+  --pv-problem: #e0b040;
+  --pv-gap: 0.55em;
+
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 10rem;
+  overflow: hidden;
+  isolation: isolate;
+  border-radius: inherit;
+  background: #05070a;
+  color: var(--pv-ink);
+  font-size: var(--pv-font);
+  line-height: 1.3;
+  user-select: none;
+  -webkit-user-select: none;
+  /* Lets the readout give way to the buttons in a narrow tile (container queries below). */
+  container-type: inline-size;
+}
+
+.pano-viewer [hidden] {
+  display: none !important;
+}
+
+.pano-viewer:fullscreen {
+  --pv-font: var(--fs-md, 1rem);
+  width: 100vw;
+  height: 100vh;
+  border-radius: 0;
+}
+
+/* --- image ---------------------------------------------------------------------------------- */
+
+.pv-stage {
+  position: absolute;
+  inset: 0;
+  cursor: grab;
+  touch-action: none;
+  outline: none;
+}
+
+.pv-stage.is-dragging {
+  cursor: grabbing;
+}
+
+.pv-stage:focus-visible {
+  outline: 2px solid var(--pv-focus);
+  outline-offset: -2px;
+}
+
+.pv-canvas,
+.pv-overlay {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* The overlay never takes a drag away from the image; only footprints react to the pointer. */
+.pv-overlay {
+  overflow: hidden;
+  pointer-events: none;
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- yaw ruler ------------------------------------------------------------------------------ */
+
+.pv-ruler-band {
+  fill: var(--pv-shade);
+}
+
+.pv-tick {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1;
+  stroke-opacity: 0.5;
+  shape-rendering: crispEdges;
+}
+
+.pv-tick-major {
+  stroke-opacity: 0.8;
+}
+
+/* The 45° ticks are the ones on the agent's own ruler. */
+.pv-tick-anchor {
+  stroke-width: 2;
+  stroke-opacity: 1;
+}
+
+.pv-ruler-label {
+  fill: var(--pv-ink-dim);
+  font-size: 1em;
+}
+
+.pv-ruler-label.is-anchor {
+  fill: #fff;
+  font-weight: 600;
+}
+
+.pv-ruler-marker {
+  fill: #fff;
+  stroke: rgba(0, 0, 0, 0.65);
+  stroke-width: 1;
+  stroke-linejoin: round;
+}
+
+/* --- crop footprints ------------------------------------------------------------------------ */
+
+.pv-crop {
+  transition: opacity 120ms ease;
+}
+
+.pv-crop path {
+  fill: none;
+  stroke-linejoin: round;
+}
+
+.pv-crop-hit {
+  stroke: transparent;
+  stroke-width: 12;
+  pointer-events: stroke;
+}
+
+/* A dark line under a light one stays readable on sky and on shadow alike. */
+.pv-crop-halo {
+  stroke: rgba(0, 0, 0, 0.6);
+  stroke-width: 3.5;
+}
+
+.pv-crop-line {
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+
+.pv-crop-label {
+  cursor: pointer;
+  pointer-events: all;
+}
+
+.pv-crop-label circle {
+  fill: rgba(8, 11, 15, 0.9);
+  stroke: #fff;
+  stroke-width: 1.25;
+}
+
+.pv-crop-label text {
+  fill: #fff;
+  font-size: 1em;
+  font-weight: 700;
+}
+
+.pv-crops.has-on .pv-crop:not(.is-on):not(.is-flash) {
+  opacity: 0.35;
+}
+
+.pv-crop.is-on .pv-crop-line,
+.pv-crop.is-flash .pv-crop-line {
+  stroke: var(--pv-highlight);
+  stroke-width: 2.5;
+  fill: var(--pv-highlight);
+  fill-opacity: 0.14;
+}
+
+.pv-crop.is-on .pv-crop-label circle,
+.pv-crop.is-flash .pv-crop-label circle {
+  fill: var(--pv-highlight);
+  stroke: #fff;
+}
+
+.pv-crop.is-on .pv-crop-label text,
+.pv-crop.is-flash .pv-crop-label text {
+  fill: #05070a;
+}
+
+.pv-crop.is-flash .pv-crop-line {
+  animation: pv-flash 1.6s ease-out both;
+}
+
+@keyframes pv-flash {
+  0% { stroke-width: 9; fill-opacity: 0.45; }
+  35% { stroke-width: 3.5; fill-opacity: 0.2; }
+  60% { stroke-width: 6; fill-opacity: 0.3; }
+  100% { stroke-width: 2.5; fill-opacity: 0.14; }
+}
+
+/* --- readout, note and controls ------------------------------------------------------------- */
+
+.pv-readout,
+.pv-note,
+.pv-controls {
+  position: absolute;
+  z-index: 1;
+}
+
+.pv-readout {
+  left: var(--pv-gap);
+  bottom: var(--pv-gap);
+  display: flex;
+  align-items: baseline;
+  gap: 0.9em;
+  max-width: calc(100% - 2 * var(--pv-gap));
+  padding: 0.3em 0.7em;
+  overflow: hidden;
+  border: 1px solid var(--pv-edge);
+  border-radius: 0.45em;
+  background: var(--pv-surface);
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.pv-field {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45em;
+}
+
+.pv-key,
+.pv-readout-pointer {
+  color: var(--pv-ink-dim);
+}
+
+/* Fixed widths: the numbers change every frame of a drag and must not shift their neighbours. */
+.pv-val {
+  display: inline-block;
+  min-width: 6ch;
+  text-align: right;
+  font-weight: 600;
+}
+
+.pv-field-fov .pv-val {
+  min-width: 4ch;
+}
+
+.pv-readout-pointer {
+  padding-left: 0.9em;
+  border-left: 1px solid var(--pv-edge);
+}
+
+.pv-note {
+  top: 50%;
+  left: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.45em 0.9em;
+  transform: translate(-50%, -50%);
+  border: 1px solid var(--pv-edge);
+  border-radius: 0.45em;
+  background: var(--pv-surface);
+  color: var(--pv-ink-dim);
+  font-size: 1.1em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.pv-note.is-problem {
+  color: var(--pv-ink);
+  border-color: var(--pv-problem);
+}
+
+.pv-note.is-problem .pv-icon {
+  color: var(--pv-problem);
+}
+
+.pv-controls {
+  right: var(--pv-gap);
+  bottom: var(--pv-gap);
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+}
+
+.pv-segment {
+  display: inline-flex;
+  margin-right: 0.25em;
+}
+
+.pv-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.4em;
+  height: 2.4em;
+  margin: 0;
+  padding: 0 0.5em;
+  border: 1px solid var(--pv-edge);
+  border-radius: 0.45em;
+  background: var(--pv-surface);
+  color: var(--pv-ink);
+  font: inherit;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pv-button:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.5);
+  background: var(--pv-surface-hover);
+}
+
+.pv-button:focus-visible {
+  outline: 2px solid var(--pv-focus);
+  outline-offset: 1px;
+}
+
+.pv-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pv-button-text {
+  padding: 0 0.75em;
+}
+
+.pv-segment .pv-button:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.pv-segment .pv-button:last-child {
+  margin-left: -1px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+/* The pressed state is an inverted chip, so it does not rest on colour alone. */
+.pv-segment .pv-button[aria-pressed="true"] {
+  border-color: #fff;
+  background: var(--pv-ink);
+  color: #05070a;
+}
+
+.pv-icon {
+  display: block;
+  flex: none;
+  width: 1.3em;
+  height: 1.3em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Readout and buttons share the bottom edge. In a narrow tile the readout gives way in steps:
+   first the pointer position, then the words, then all of it. Widths are in em of the viewer's
+   own font, so the steps hold when the stage view scales the overlay. */
+@container (max-width: 62em) {
+  .has-controls .pv-readout-pointer {
+    display: none;
+  }
+}
+
+@container (max-width: 46em) {
+  .has-controls .pv-key {
+    display: none;
+  }
+}
+
+@container (max-width: 38em) {
+  .has-controls .pv-readout,
+  .pv-readout-pointer {
+    display: none;
+  }
+}
+
+@container (max-width: 23em) {
+  .pv-key {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pv-crop {
+    transition: none;
+  }
+
+  .pv-crop.is-flash .pv-crop-line {
+    animation: none;
+    stroke-width: 4;
+    fill-opacity: 0.3;
+  }
+}

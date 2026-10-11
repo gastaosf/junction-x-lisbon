@@ -4,7 +4,7 @@ Two synthetic panoramas (one Urban Special One, one non-Urban) are driven by a s
 model. HTTP goes through httpx.MockTransport and the MCQ is answered through the server API,
 exactly as the operator's click would be. No network, no API key.
 
-Set GEOAGENT_WRITE_SAMPLE=<path> to also write the Special One's export there (this is how
+Set ASTROLABIO_WRITE_SAMPLE=<path> to also write the Special One's export there (this is how
 docs/sample_export.json is produced).
 """
 
@@ -28,16 +28,16 @@ import pytest
 from PIL import Image
 
 from eval.run_eval import Truth, load_exports, score_run
-from geoagent import runner as runner_module
-from geoagent.config import Settings
-from geoagent.eventlog import validate_export
-from geoagent.openai_client import from_response, to_input
-from geoagent.runner import RunManager, export_run, load_tasks
-from geoagent.schema import Label
-from geoagent.scoring import haversine_m
+from astrolabio import runner as runner_module
+from astrolabio.config import Settings
+from astrolabio.eventlog import validate_export
+from astrolabio.openai_client import from_response, to_input
+from astrolabio.runner import RunManager, export_run, load_tasks
+from astrolabio.schema import Label
+from astrolabio.scoring import haversine_m
 from server.app import create_app
 
-SAMPLE_ENV = "GEOAGENT_WRITE_SAMPLE"
+SAMPLE_ENV = "ASTROLABIO_WRITE_SAMPLE"
 SPECIAL_ID, RURAL_ID = "pano_a", "pano_b"
 
 ALFAMA = {
@@ -351,7 +351,7 @@ async def test_event_log_covers_the_run_in_order(finished_run: dict[str, Any]) -
     assert start["label"] == "Urban" and start["capture_timestamp"] == "20261011093000"
     assert start["model"] == "gpt-6.1-sol" and start["effort"] == "xhigh"
     assert start["request"]["reasoning"] == {"effort": "xhigh", "summary": "auto"}
-    assert start["request"]["prompt_cache_key"] == "geoagent-e2e-pano_a"
+    assert start["request"]["prompt_cache_key"] == "astrolabio-e2e-pano_a"
     assert "Regional cue playbook" in start["system_prompt"]
     assert {t.get("name") or t["type"] for t in start["tools"]} >= {"view_crop", "submit_locations", "web_search"}
 
@@ -446,7 +446,7 @@ async def test_history_translates_to_a_valid_stateless_input(finished_run: dict[
 async def test_only_the_mock_geocoder_was_called(finished_run: dict[str, Any]) -> None:
     hosts = {r.url.host for r in finished_run["requests"]}
     assert hosts == {"nominatim.openstreetmap.org", "photon.komoot.io"}
-    assert all("geoagent" in r.headers.get("user-agent", "") for r in finished_run["requests"])
+    assert all("astrolabio" in r.headers.get("user-agent", "") for r in finished_run["requests"])
 
 
 async def test_summary_and_answers_files(finished_run: dict[str, Any]) -> None:

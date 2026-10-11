@@ -1,0 +1,446 @@
+/*
+  Evaluation screen: the tab shell (js/screens/eval.js) and its Set and Label tabs
+  (js/screens/eval/set.js, label.js). The Run, Results and Compare tabs are styled in
+  eval-results.css.
+
+  Shared with the other tabs:
+    .eval-tab            the node a tab mounts into
+    .eval-tab-head       the row that opens a tab (title, then its controls)
+    .eval-tab-title      an <h2> inside a tab
+  Everything else here is prefixed .eval-set-, .eval-build-, .eval-job-, .eval-label- or .eval-bulk-.
+*/
+
+/* ------------------------------------------------------------------ shell */
+
+.screen-eval .page-head {
+  margin-bottom: var(--s-3);
+}
+
+.eval-guard {
+  max-width: 76rem;
+  margin-bottom: var(--s-4);
+}
+
+.eval-tabs {
+  margin-bottom: var(--s-4);
+}
+
+.eval-panel {
+  min-width: 0;
+}
+
+.eval-tab-error {
+  max-width: 56rem;
+}
+
+.eval-tab-error .card-title {
+  margin: 0;
+}
+
+.eval-tab-error .card-title .icon {
+  color: var(--bad);
+}
+
+.eval-tab-head {
+  min-height: var(--control-h);
+}
+
+.eval-tab-title {
+  margin: 0;
+}
+
+/* ------------------------------------------------------------------ set: summary */
+
+.eval-set-notices:empty,
+.eval-set-status:empty,
+.eval-label-status:empty {
+  display: none;
+}
+
+.eval-stats {
+  display: grid;
+  grid-template-columns: minmax(14rem, 1fr) minmax(0, 2fr) minmax(0, 2fr);
+  gap: var(--s-4);
+}
+
+.eval-stat-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+
+/* Columns as wide as what they hold: equal thirds would wrap the longest badge at 1280. */
+.eval-stat-row {
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+
+.eval-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-1);
+  min-width: 0;
+}
+
+.eval-stat-value {
+  color: var(--text-strong);
+  font-size: var(--fs-2xl);
+  font-weight: 650;
+  line-height: 1.1;
+}
+
+.eval-stat .badge {
+  max-width: 100%;
+  white-space: normal;
+}
+
+/* The three label states as one bar. The numbers and badges above it carry the meaning; the bar
+   only shows the proportions. */
+.eval-labelbar {
+  display: flex;
+  height: 0.5rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--panel-3);
+}
+
+.eval-labelbar-seg {
+  height: 100%;
+  min-width: 0;
+}
+
+.eval-labelbar-seg + .eval-labelbar-seg {
+  box-shadow: -1px 0 0 var(--panel);
+}
+
+.eval-labelbar-seg.is-confirmed {
+  background: var(--ok);
+}
+
+.eval-labelbar-seg.is-unconfirmed {
+  background: var(--warn);
+}
+
+.eval-labelbar-seg.is-todo {
+  background: var(--bad);
+}
+
+/* ------------------------------------------------------------------ set: map and split */
+
+.eval-set-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(18rem, 1fr);
+  gap: var(--s-4);
+  align-items: stretch;
+}
+
+.eval-map-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.eval-set-map {
+  flex: 1 1 auto;
+  height: clamp(20rem, 44vh, 44rem);
+  min-height: 20rem;
+}
+
+.eval-breakdowns {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+
+.eval-breakdown .table td {
+  border-top-color: transparent;
+}
+
+.eval-breakdown-name {
+  width: 40%;
+  overflow-wrap: anywhere;
+}
+
+.eval-breakdown-bar {
+  width: 40%;
+}
+
+/* ------------------------------------------------------------------ set: entries */
+
+.eval-entries-table td {
+  white-space: nowrap;
+}
+
+.eval-entries-table td.wrap-any {
+  min-width: 8rem;
+  white-space: normal;
+}
+
+.eval-entries-table th.sortable:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.eval-entry-actions {
+  width: 1%;
+}
+
+/* ------------------------------------------------------------------ set: build */
+
+.eval-build-intro {
+  max-width: 64rem;
+}
+
+.eval-build-token:empty,
+.eval-build-error:empty,
+.eval-job-host:empty,
+.eval-job-outcome:empty {
+  display: none;
+}
+
+.eval-build-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(10rem, 14rem)) minmax(16rem, 1fr);
+  gap: var(--s-4);
+  align-items: start;
+}
+
+.eval-build-number {
+  width: 100%;
+}
+
+.eval-build-replace .check {
+  min-height: var(--control-h);
+}
+
+.eval-build-reason {
+  flex: 1 1 16rem;
+}
+
+.eval-job {
+  padding: var(--s-3) var(--s-4);
+  background: var(--panel-2);
+}
+
+.eval-job-title {
+  margin: 0;
+}
+
+.eval-job-line {
+  min-height: 1.5em;
+}
+
+.eval-job-details > summary {
+  width: max-content;
+  max-width: 100%;
+  color: var(--dim);
+  font-size: var(--fs-sm);
+}
+
+.eval-job-log {
+  max-height: 18rem;
+  margin-top: var(--s-2);
+}
+
+/* ------------------------------------------------------------------ label: one at a time */
+
+.eval-label-one {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(17rem, 21rem);
+  gap: var(--s-4);
+  align-items: start;
+}
+
+.eval-label-stage {
+  min-width: 0;
+}
+
+/* Tall enough to judge a street from, short enough that the buttons beside it stay on screen. */
+.eval-label-viewer {
+  height: clamp(22rem, calc(100vh - var(--shell-h) - 19rem), 80rem);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  background: var(--bg-sunk);
+}
+
+.eval-label-side {
+  position: sticky;
+  top: calc(var(--shell-h) + var(--s-3));
+}
+
+.eval-label-progress {
+  color: var(--text-strong);
+  font-size: var(--fs-lg);
+  font-weight: 650;
+}
+
+.eval-label-choices {
+  gap: var(--s-2);
+}
+
+.eval-label-choices > button {
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.eval-label-choice {
+  min-height: 3.2rem;
+  padding: 0.4rem 0.8rem;
+  border-left-width: 4px;
+  font-size: var(--fs-lg);
+}
+
+.eval-label-choice:nth-child(1) {
+  border-left-color: var(--urban);
+}
+
+.eval-label-choice:nth-child(2) {
+  border-left-color: var(--nonurban);
+}
+
+/* The pre-filled guess: marked, but visibly not yet a decision. */
+.eval-label-choice.is-guess,
+.eval-bulk-choices > button.is-guess {
+  border-style: dashed;
+  border-color: var(--line-strong);
+}
+
+.eval-label-choice.is-guess:nth-child(1) {
+  border-left-color: var(--urban);
+}
+
+.eval-label-choice.is-guess:nth-child(2) {
+  border-left-color: var(--nonurban);
+}
+
+.eval-label-mark {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 0.3em;
+  min-width: 0;
+  color: var(--dim);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+
+.eval-label-choice[aria-pressed="true"] .eval-label-mark {
+  color: inherit;
+}
+
+.eval-label-choices kbd,
+.eval-label-nav kbd {
+  margin-left: auto;
+}
+
+.eval-label-nav > button {
+  flex: 1 1 0;
+  justify-content: flex-start;
+}
+
+.eval-label-nav > button:last-child .icon {
+  order: 3;
+}
+
+.eval-label-saved {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  color: var(--dim);
+}
+
+.eval-label-saved > .icon {
+  color: var(--ok);
+}
+
+.eval-label-failure:empty,
+.eval-label-done:empty,
+.eval-label-empty:empty {
+  display: none;
+}
+
+.eval-label-help kbd {
+  font-size: 0.9em;
+}
+
+/* ------------------------------------------------------------------ label: bulk review */
+
+.eval-bulk {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
+  gap: var(--s-3);
+}
+
+.eval-bulk-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.eval-bulk-thumb {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  aspect-ratio: 2 / 1;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--bg-sunk);
+}
+
+.eval-bulk-thumb:focus-visible {
+  outline-offset: -2px;
+}
+
+.eval-bulk-thumb > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.eval-bulk-noimage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  height: 100%;
+  color: var(--bad);
+  font-size: var(--fs-sm);
+  white-space: normal;
+}
+
+.eval-bulk-body {
+  padding: var(--s-2) var(--s-3) var(--s-3);
+}
+
+.eval-bulk-choices {
+  display: flex;
+}
+
+.eval-bulk-choices > button {
+  flex: 1 1 0;
+}
+
+/* ------------------------------------------------------------------ narrow windows (1280 and below) */
+
+@media (max-width: 1400px) {
+  .eval-stats {
+    grid-template-columns: minmax(11rem, 1fr) minmax(0, 2fr) minmax(0, 2fr);
+  }
+
+  .eval-build-form {
+    grid-template-columns: repeat(3, minmax(9rem, 1fr));
+  }
+
+  .eval-build-replace {
+    grid-column: 1 / -1;
+  }
+}

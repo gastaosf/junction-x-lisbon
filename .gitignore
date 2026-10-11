@@ -7,3 +7,4 @@ runs/
 eval/data/*
 !eval/data/.gitkeep
 .pytest_cache/
+data/

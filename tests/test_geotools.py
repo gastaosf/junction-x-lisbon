@@ -13,10 +13,10 @@ import httpx
 import numpy as np
 import pytest
 
-from geoagent.config import Settings
-from geoagent.schema import Label, PanoramaTask
-from geoagent.tools import http, overpass, places, satellite, streetview
-from geoagent.tools.base import ToolContext
+from astrolabio.config import Settings
+from astrolabio.schema import Label, PanoramaTask
+from astrolabio.tools import http, overpass, places, satellite, streetview
+from astrolabio.tools.base import ToolContext
 
 Handler = Callable[[httpx.Request], httpx.Response]
 
@@ -660,7 +660,7 @@ def test_footprint_matches_web_mercator_zoom() -> None:
     assert area.south < 38.7139 < area.north and area.west < -9.1334 < area.east
     assert (area.north + area.south) / 2 == pytest.approx(38.7139, abs=1e-4)
     # the box really is that wide on the ground
-    from geoagent.scoring import haversine_m
+    from astrolabio.scoring import haversine_m
 
     assert haversine_m(38.7139, area.west, 38.7139, area.east) == pytest.approx(area.ground_width_m, rel=5e-3)
 

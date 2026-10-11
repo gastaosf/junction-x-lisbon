@@ -1,0 +1,532 @@
+/*
+  Evaluation screen: the Run, Results and Compare tabs (js/screens/eval/run.js, results.js,
+  compare.js). The tab shell and the Set and Label tabs are styled in eval.css.
+
+  Shared by the three tabs:
+    .eval-kpis > .eval-kpi       headline numbers (.eval-kpi-value, .eval-kpi-label, .eval-kpi-triple)
+    .eval-is-demo                on a tab body whose numbers come from the scripted demo model
+    .eval-demo-num / -mark       one such number in a list of real ones
+    .eval-chart                  a sized host for a chart
+    .eval-band, .eval-band-line  the legend of the distance bands; .eval-band-tag in a table cell
+    .eval-delta-mark             the better / worse mark after a change
+  Everything else is prefixed .eval-run-, .eval-res- or .eval-cmp-.
+*/
+
+/* ------------------------------------------------------------------ shared: headline numbers */
+
+.eval-kpis {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--s-3);
+}
+
+.eval-kpi {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  background: var(--panel);
+}
+
+.eval-kpi-value {
+  color: var(--text-strong);
+  font-size: var(--fs-2xl);
+  font-weight: 650;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.eval-kpi-value .spinner {
+  flex: none;
+}
+
+.eval-kpi-value > .row {
+  font-size: var(--fs-md);
+  font-weight: 400;
+}
+
+.eval-kpi-triple {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-2);
+}
+
+.eval-kpi-triple .eval-kpi-value {
+  font-size: var(--fs-xl);
+}
+
+/* A demo run's numbers carry the word on every card, not only in the notice above them. */
+.eval-is-demo .eval-kpi {
+  border-style: dashed;
+  border-color: var(--warn-line);
+}
+
+.eval-is-demo .eval-kpi::after {
+  content: "DEMO";
+  position: absolute;
+  top: var(--s-2);
+  right: var(--s-2);
+  padding: 0 0.35rem;
+  border: 1px solid var(--warn-line);
+  border-radius: var(--r-1);
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+
+.eval-demo-num {
+  color: var(--dim);
+}
+
+.eval-demo-mark {
+  padding: 0 0.3rem;
+  border: 1px solid var(--warn-line);
+  border-radius: var(--r-1);
+  color: var(--warn);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ------------------------------------------------------------------ shared: charts, bands, deltas */
+
+.eval-chart {
+  height: clamp(14rem, 26vh, 22rem);
+  min-width: 0;
+}
+
+.eval-band {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  white-space: nowrap;
+}
+
+/* The same stroke and dash as the line of that band on the map (css/components/map.css). */
+.eval-band-line {
+  flex: none;
+  width: 1.75rem;
+  height: 0;
+  border-top: 2px solid var(--ok);
+}
+
+.eval-band-line.eval-band-1km {
+  border-top: 2px dashed var(--accent);
+}
+
+.eval-band-line.eval-band-10km {
+  border-top: 2px dashed var(--warn);
+}
+
+.eval-band-line.eval-band-far {
+  border-top: 2px dotted var(--bad);
+}
+
+.eval-band-tag {
+  display: inline-block;
+  min-width: 4.4rem;
+  padding: 0 0.35rem;
+  border: 1px solid var(--ok-line);
+  border-radius: var(--r-1);
+  background: var(--ok-soft);
+  color: var(--ok);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-align: center;
+}
+
+.eval-band-tag-1km {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.eval-band-tag-10km {
+  border-color: var(--warn-line);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.eval-band-tag-far {
+  border-color: var(--bad-line);
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+
+.eval-delta-mark {
+  display: inline-flex;
+  width: 1.1em;
+  margin-left: 0.3em;
+  vertical-align: -0.12em;
+}
+
+/* ------------------------------------------------------------------ run: form and launch */
+
+.eval-run-intro,
+.eval-cmp-intro {
+  max-width: 64rem;
+  margin: 0;
+}
+
+.eval-run-context:empty,
+.eval-run-notes:empty,
+.eval-run-reasons:empty,
+.eval-run-error:empty,
+.eval-res-status:empty,
+.eval-res-demo:empty,
+.eval-res-mapnote:empty,
+.eval-res-selected:empty,
+.eval-res-rescore-error:empty,
+.eval-cmp-status:empty,
+.eval-cmp-demo:empty {
+  display: none;
+}
+
+.eval-run-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(22rem, 2fr);
+  gap: var(--s-4);
+  align-items: start;
+}
+
+.eval-run-form .card-title,
+.eval-run-launch .card-title,
+.eval-res-body .card-title,
+.eval-cmp-body .card-title {
+  margin: 0;
+}
+
+.eval-run-fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s-4);
+  align-items: start;
+}
+
+.eval-run-fields input,
+.eval-run-fields select {
+  width: 100%;
+}
+
+.eval-run-switches {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-4);
+}
+
+.eval-run-tools {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: var(--s-2) var(--s-4);
+}
+
+.eval-run-tool {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.eval-run-tool-note {
+  min-height: 1.2em;
+  padding-left: 1.6rem;
+}
+
+.eval-run-tool-lock {
+  display: inline-flex;
+  color: var(--dim);
+}
+
+.eval-run-numbers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-3);
+}
+
+.eval-run-numbers .eval-kpi {
+  background: var(--panel-2);
+}
+
+.eval-run-notes p,
+.eval-cmp-body p,
+.eval-res-body p {
+  margin: 0;
+}
+
+.eval-run-blocking {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.eval-run-go {
+  max-width: 100%;
+  min-height: 2.6rem;
+  padding-inline: var(--s-4);
+  font-size: var(--fs-lg);
+  white-space: normal;
+  text-align: left;
+}
+
+/* ------------------------------------------------------------------ run: the list */
+
+/* An absolutely placed child (.sr-only in a header) must scroll with its table, not widen the page. */
+.eval-tab-run .table-wrap,
+.eval-tab-results .table-wrap,
+.eval-tab-compare .table-wrap {
+  position: relative;
+}
+
+.eval-run-table td {
+  white-space: nowrap;
+}
+
+.eval-run-table td.eval-run-config {
+  min-width: 9rem;
+  white-space: normal;
+}
+
+.eval-run-actions,
+.eval-cmp-actions {
+  width: 1%;
+}
+
+/* ------------------------------------------------------------------ results */
+
+.eval-res-pick {
+  max-width: 22rem;
+}
+
+.eval-cmp-pick {
+  flex: 1 1 14rem;
+  min-width: 12rem;
+  max-width: 26rem;
+}
+
+.eval-res-summary-table th,
+.eval-res-summary-table td {
+  white-space: nowrap;
+}
+
+.eval-res-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(22rem, 2fr);
+  gap: var(--s-4);
+  align-items: stretch;
+}
+
+.eval-res-map-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.eval-res-map {
+  flex: 1 1 auto;
+  height: clamp(22rem, 48vh, 46rem);
+  min-height: 22rem;
+}
+
+.eval-res-map-card > .card-foot {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+}
+
+.eval-res-legend {
+  gap: var(--s-2) var(--s-5);
+}
+
+.eval-res-chosen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  background: var(--panel);
+}
+
+.eval-res-chosen-facts {
+  grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr);
+}
+
+.eval-res-charts > .card {
+  flex: 1 1 0;
+}
+
+.eval-res-table td,
+.eval-cmp-table td,
+.eval-res-variants td {
+  white-space: nowrap;
+}
+
+.eval-res-table td.eval-res-stop {
+  min-width: 9rem;
+  white-space: normal;
+}
+
+.eval-res-variants td.eval-res-alloc {
+  min-width: 11rem;
+  white-space: normal;
+}
+
+.eval-res-show[aria-pressed="true"] {
+  color: var(--accent);
+}
+
+.eval-res-pid {
+  color: var(--accent);
+}
+
+.eval-res-table th.sortable:focus-visible,
+.eval-cmp-table th.sortable:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.eval-res-lower {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(22rem, 2fr);
+  gap: var(--s-4);
+  align-items: start;
+}
+
+.eval-res-indent {
+  padding-left: 1.6rem;
+}
+
+.eval-res-tagfield {
+  max-width: 18rem;
+}
+
+.eval-res-config {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-5);
+}
+
+/* ------------------------------------------------------------------ compare */
+
+.eval-cmp-sides {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-4);
+}
+
+.eval-cmp-config > summary {
+  color: var(--dim);
+  cursor: pointer;
+}
+
+.eval-cmp-config > .kv {
+  margin-top: var(--s-2);
+}
+
+.eval-cmp-kpis {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.eval-cmp-kpis .eval-kpi {
+  background: var(--panel-2);
+}
+
+/* B higher, ties, A higher as one bar. The numbers above it carry the meaning; the bar only
+   shows the proportions. */
+.eval-cmp-bar {
+  display: flex;
+  height: 0.5rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--panel-3);
+}
+
+.eval-cmp-bar-seg {
+  height: 100%;
+  min-width: 0;
+}
+
+.eval-cmp-bar-seg + .eval-cmp-bar-seg {
+  box-shadow: -1px 0 0 var(--panel);
+}
+
+.eval-cmp-bar-seg.is-b {
+  background: var(--ok);
+}
+
+.eval-cmp-bar-seg.is-tie {
+  background: var(--dim);
+}
+
+.eval-cmp-bar-seg.is-a {
+  background: var(--bad);
+}
+
+.eval-cmp-groups th,
+.eval-cmp-groups td {
+  white-space: nowrap;
+}
+
+.eval-cmp-groups .eval-cmp-grouphead {
+  border-left: 1px solid var(--line);
+  text-align: center;
+}
+
+.eval-cmp-groups .eval-cmp-first {
+  border-left: 1px solid var(--line);
+}
+
+.eval-cmp-lower {
+  display: grid;
+  grid-template-columns: minmax(22rem, 2fr) minmax(0, 3fr);
+  gap: var(--s-4);
+  align-items: start;
+}
+
+/* The table is long: the chart stays in view beside it, so a point and its row can be matched. */
+.eval-cmp-lower > section {
+  position: sticky;
+  top: calc(var(--shell-h) + var(--s-3));
+}
+
+.eval-cmp-chart {
+  height: clamp(18rem, 40vh, 30rem);
+}
+
+.eval-cmp-change {
+  display: inline-block;
+  min-width: 4.5rem;
+}
+
+/* ------------------------------------------------------------------ narrow windows (1280 and below) */
+
+@media (max-width: 1400px) {
+  .eval-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .eval-cmp-kpis {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .eval-run-grid,
+  .eval-res-lower {
+    grid-template-columns: minmax(0, 5fr) minmax(22rem, 3fr);
+  }
+
+  .eval-run-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .eval-res-overview {
+    grid-template-columns: minmax(0, 1fr) minmax(20rem, 26rem);
+  }
+
+  .eval-res-chosen-facts {
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
+}

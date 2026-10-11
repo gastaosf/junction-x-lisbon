@@ -1,7 +1,7 @@
 import pytest
 
-from geoagent.penalties import PenaltyLedger
-from geoagent.schema import Entry, PenaltyState
+from astrolabio.penalties import PenaltyLedger
+from astrolabio.schema import Entry, PenaltyState
 
 A = (38.722300, -9.139300)
 B = (41.157900, -8.629100)

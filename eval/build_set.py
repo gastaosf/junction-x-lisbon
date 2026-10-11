@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import random
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,7 +24,7 @@ import numpy as np
 import typer
 from dotenv import load_dotenv
 
-from geoagent.schema import Label
+from astrolabio.schema import Label
 
 MAPILLARY_URL = "https://graph.mapillary.com/images"
 FIELDS = "id,computed_geometry,geometry,captured_at,is_pano,thumb_original_url,thumb_2048_url,sequence,creator"
@@ -33,6 +34,9 @@ MANIFEST_NAME = "manifest.json"
 TODO_LABEL = "TODO"
 
 Kind = Literal["city", "town", "village", "rural", "track"]
+# How a caller other than the terminal follows a build: progress(done, total, text) and log(line).
+Progress = Callable[[int, int, str], None]
+Log = Callable[[str], None]
 
 # Half-size of the search box in degrees. The Graph API rejects filtered bbox searches larger
 # than 0.01 square degrees, so the widest box (0.09 x 0.09) stays under that.
@@ -180,13 +184,21 @@ def normalise_image(raw: dict[str, Any], area: Area) -> dict[str, Any] | None:
     }
 
 
-def fetch_area(client: httpx.Client, token: str, area: Area, *, limit: int = 100) -> list[dict[str, Any]]:
-    """Panoramas inside one area's box. Raises httpx.HTTPError on a failed request."""
+# In a dense city centre the Graph API answers the whole box with a 500 ("reduce the amount of
+# data"), whatever the limit. The box is then searched as a grid of cells of this many per side.
+_GRID = 4
+# Cells tried per area at most: enough to find panoramas, without 16 requests for every dense box.
+_MAX_CELLS = 8
+
+
+def _search(
+    client: httpx.Client, token: str, area: Area, bbox: tuple[float, float, float, float], limit: int
+) -> list[dict[str, Any]]:
     response = client.get(
         MAPILLARY_URL,
         params={
             "fields": FIELDS,
-            "bbox": ",".join(f"{v:.6f}" for v in area.bbox),
+            "bbox": ",".join(f"{v:.6f}" for v in bbox),
             "is_pano": "true",
             "limit": str(limit),
         },
@@ -195,6 +207,48 @@ def fetch_area(client: httpx.Client, token: str, area: Area, *, limit: int = 100
     response.raise_for_status()
     candidates = (normalise_image(raw, area) for raw in response.json().get("data", []))
     return [c for c in candidates if c is not None]
+
+
+def grid_cells(area: Area) -> list[tuple[float, float, float, float]]:
+    """The area's box as _GRID x _GRID cells, in an order fixed by the area name and spread over the box."""
+    min_lng, min_lat, max_lng, max_lat = area.bbox
+    step_lng, step_lat = (max_lng - min_lng) / _GRID, (max_lat - min_lat) / _GRID
+    cells = [
+        (min_lng + i * step_lng, min_lat + j * step_lat, min_lng + (i + 1) * step_lng, min_lat + (j + 1) * step_lat)
+        for i in range(_GRID)
+        for j in range(_GRID)
+    ]
+    random.Random(area.name).shuffle(cells)
+    return cells
+
+
+def fetch_area(client: httpx.Client, token: str, area: Area, *, limit: int = 100) -> list[dict[str, Any]]:
+    """Panoramas inside one area's box. Raises httpx.HTTPError on a failed request.
+
+    A 5xx on the whole box is retried as smaller cells; the error is raised only if every cell
+    tried fails too."""
+    try:
+        return _search(client, token, area, area.bbox, limit)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code < 500:
+            raise
+        whole_box_error = exc
+    found: dict[str, dict[str, Any]] = {}
+    answered = False
+    for cell in grid_cells(area)[:_MAX_CELLS]:
+        try:
+            for candidate in _search(client, token, area, cell, limit):
+                found.setdefault(candidate["id"], candidate)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code < 500:
+                raise
+            continue
+        answered = True
+        if len(found) >= limit:
+            break
+    if not answered:
+        raise whole_box_error
+    return list(found.values())[:limit]
 
 
 def sampling_order(by_area: dict[str, list[dict[str, Any]]], rng: random.Random) -> list[dict[str, Any]]:
@@ -299,23 +353,51 @@ def mapillary_token() -> str | None:
     return os.environ.get("MAPILLARY_TOKEN") or None
 
 
+def make_client() -> httpx.Client:
+    """The HTTP client of a build; a module global so tests can swap in a mock transport."""
+    return httpx.Client(timeout=60.0, follow_redirects=True)
+
+
+def _say(log: Log | None, message: str, *, err: bool = False) -> None:
+    """One line of build output: to the caller's log when it gave one, else to the terminal."""
+    if log is None:
+        typer.echo(message, err=err)
+    else:
+        log(message.strip())
+
+
 def collect_candidates(
-    client: httpx.Client, token: str, areas: tuple[Area, ...], *, per_area_limit: int
+    client: httpx.Client,
+    token: str,
+    areas: tuple[Area, ...],
+    *,
+    per_area_limit: int,
+    progress: Progress | None = None,
+    log: Log | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     by_area: dict[str, list[dict[str, Any]]] = {}
-    for area in areas:
+    for done, area in enumerate(areas, start=1):
         try:
             by_area[area.name] = fetch_area(client, token, area, limit=per_area_limit)
         except (httpx.HTTPError, ValueError) as exc:
-            typer.echo(f"  {area.name}: search failed ({exc}); skipping", err=True)
+            _say(log, f"  {area.name}: search failed ({exc}); skipping", err=True)
             by_area[area.name] = []
-            continue
-        typer.echo(f"  {area.name} [{area.country}, {area.kind}]: {len(by_area[area.name])} panoramas")
+        else:
+            found = len(by_area[area.name])
+            _say(log, f"  {area.name} [{area.country}, {area.kind}]: {found} panorama{'' if found == 1 else 's'}")
+        if progress is not None:
+            progress(done, len(areas), f"searched {area.name}")
     return by_area
 
 
 def download_set(
-    client: httpx.Client, order: list[dict[str, Any]], count: int, data_dir: Path
+    client: httpx.Client,
+    order: list[dict[str, Any]],
+    count: int,
+    data_dir: Path,
+    *,
+    progress: Progress | None = None,
+    log: Log | None = None,
 ) -> list[dict[str, Any]]:
     """Walk the sampling order until `count` panoramas are on disk; failures fall through to the next one."""
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -327,17 +409,47 @@ def download_set(
             response = client.get(candidate["url"])
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            typer.echo(f"  {candidate['id']}: download failed ({exc}); trying the next candidate", err=True)
+            _say(log, f"  {candidate['id']}: download failed ({exc}); trying the next candidate", err=True)
             continue
         jpeg = prepare_image(response.content)
         if jpeg is None:
-            typer.echo(f"  {candidate['id']}: not a 2:1 equirectangular image; skipped", err=True)
+            _say(log, f"  {candidate['id']}: not a 2:1 equirectangular image; skipped", err=True)
             continue
         entry = manifest_entry(candidate)
         (data_dir / entry["filename"]).write_bytes(jpeg)
         entries.append(entry)
-        typer.echo(f"  [{len(entries)}/{count}] {entry['filename']}  {entry['area']}  label guess: {entry['label']}")
+        _say(log, f"  [{len(entries)}/{count}] {entry['filename']}  {entry['area']}  label guess: {entry['label']}")
+        if progress is not None:
+            progress(len(entries), count, f"downloaded {entry['filename']}")
     return entries
+
+
+def build_set(
+    count: int,
+    seed: int,
+    out: Path,
+    per_area_limit: int,
+    force: bool,
+    *,
+    token: str,
+    progress: Progress | None = None,
+    log: Log | None = None,
+) -> list[dict[str, Any]]:
+    """Search every built-in area, sample `count` panoramas and download them into `out`.
+
+    Returns the manifest entries and leaves writing the manifest to the caller: the command below
+    saves it plainly, the console under the lock its label edits share. Raises FileExistsError
+    before any request when `out` already holds a manifest and `force` is false (its hand labels
+    would be lost).
+    """
+    if (out / MANIFEST_NAME).exists() and not force:
+        raise FileExistsError(out / MANIFEST_NAME)
+    with make_client() as client:
+        _say(log, f"Searching {len(AREAS)} areas...")
+        by_area = collect_candidates(client, token, AREAS, per_area_limit=per_area_limit, progress=progress, log=log)
+        order = sampling_order(by_area, random.Random(seed))
+        _say(log, f"Downloading up to {count} of {len(order)} candidates...")
+        return download_set(client, order, count, out, progress=progress, log=log)
 
 
 app = typer.Typer(add_completion=False, help=__doc__)
@@ -361,16 +473,11 @@ def build(
         )
         raise typer.Exit(code=2)
     manifest_path = out / MANIFEST_NAME
-    if manifest_path.exists() and not force:
+    try:
+        entries = build_set(count, seed, out, per_area_limit, force, token=token)
+    except FileExistsError:
         typer.echo(f"{manifest_path} already exists; pass --force to rebuild (hand labels would be lost).", err=True)
-        raise typer.Exit(code=2)
-
-    with httpx.Client(timeout=60.0, follow_redirects=True) as client:
-        typer.echo(f"Searching {len(AREAS)} areas...")
-        by_area = collect_candidates(client, token, AREAS, per_area_limit=per_area_limit)
-        order = sampling_order(by_area, random.Random(seed))
-        typer.echo(f"Downloading up to {count} of {len(order)} candidates...")
-        entries = download_set(client, order, count, out)
+        raise typer.Exit(code=2) from None
 
     save_manifest(manifest_path, entries)
     todo = sum(1 for e in entries if e["label"] == TODO_LABEL)

@@ -15,15 +15,15 @@ import numpy as np
 import openai
 import pytest
 
-from geoagent import loop as loop_module
-from geoagent import prompts
-from geoagent import session as session_module
-from geoagent.config import Budget, Pricing, Settings
-from geoagent.loop import estimate_cost, prompt_cache_key, run_agent, usage_dict
-from geoagent.openai_client import API_READ_TIMEOUT_S, OpenAIModelClient
-from geoagent.pano import Panorama
-from geoagent.schema import Label, PanoramaTask
-from geoagent.session import PanoramaSession
+from astrolabio import loop as loop_module
+from astrolabio import prompts
+from astrolabio import session as session_module
+from astrolabio.config import Budget, Pricing, Settings
+from astrolabio.loop import estimate_cost, prompt_cache_key, run_agent, usage_dict
+from astrolabio.openai_client import API_READ_TIMEOUT_S, OpenAIModelClient
+from astrolabio.pano import Panorama
+from astrolabio.schema import Label, PanoramaTask
+from astrolabio.session import PanoramaSession
 
 HYP = {
     "lat": 38.7223,
@@ -169,7 +169,7 @@ async def test_happy_path_update_then_submit(tmp_path: Path, pano_path: Path) ->
     assert first["reasoning"] == {"effort": "high", "summary": "auto"}
     assert first["store"] is False and first["parallel_tool_calls"] is True
     assert first["include"] == ["reasoning.encrypted_content"]  # allow_web is off in these tests
-    assert first["prompt_cache_key"] == second["prompt_cache_key"] == "geoagent-run-test-p1"
+    assert first["prompt_cache_key"] == second["prompt_cache_key"] == "astrolabio-run-test-p1"
     assert not {"tool_choice", "temperature", "top_p", "truncation", "previous_response_id", "max_tool_calls"} & set(first)
     assert [m["role"] for m in first["messages"]] == ["user"]
     assert sum(b["type"] == "image" for b in first["messages"][0]["content"]) == 11
@@ -212,7 +212,7 @@ async def test_run_start_and_model_events_are_complete_and_image_free(tmp_path: 
     assert data["label"] == "Urban" and data["capture_timestamp"] == "20261011093000"
     assert data["model"] == "gpt-6.1-sol" and data["effort"] == "xhigh"
     assert data["request"]["reasoning"] == {"effort": "xhigh", "summary": "auto"}
-    assert data["request"]["prompt_cache_key"] == "geoagent-run-test-p1"
+    assert data["request"]["prompt_cache_key"] == "astrolabio-run-test-p1"
     assert not {"instructions", "tools"} & set(data["request"])
     assert data["system_prompt"] == prompts.build_system_prompt(session.settings)
     assert [t["name"] for t in data["tools"]][:3] == ["view_crop", "update_candidates", "submit_locations"]
@@ -679,7 +679,7 @@ def test_long_context_reprices_the_whole_request() -> None:
 
 
 def test_prompt_cache_key_is_stable_per_panorama_and_fits_the_api_limit() -> None:
-    assert prompt_cache_key("run-test", "p1") == prompt_cache_key("run-test", "p1") == "geoagent-run-test-p1"
+    assert prompt_cache_key("run-test", "p1") == prompt_cache_key("run-test", "p1") == "astrolabio-run-test-p1"
     assert prompt_cache_key("run-test", "p1") != prompt_cache_key("run-test", "p2")
     long = prompt_cache_key("run-" + "x" * 80, "panorama-" + "y" * 80)
     assert len(long) <= 64 and long == prompt_cache_key("run-" + "x" * 80, "panorama-" + "y" * 80)

@@ -21,8 +21,8 @@ import typer
 from pydantic import ValidationError
 
 from eval.build_set import DEFAULT_DATA_DIR, MANIFEST_NAME, load_manifest
-from geoagent.schema import Hypothesis, Label, PanoramaTask
-from geoagent.scoring import RANK_WEIGHTS, haversine_m, score_list
+from astrolabio.schema import Hypothesis, Label, PanoramaTask
+from astrolabio.scoring import RANK_WEIGHTS, haversine_m, score_list
 
 GROUPS: tuple[str, ...] = ("all", Label.URBAN.value, Label.NON_URBAN.value)
 THRESHOLDS_M: tuple[tuple[str, float], ...] = (("within_100m", 100.0), ("within_1km", 1_000.0), ("within_10km", 10_000.0))
@@ -171,7 +171,7 @@ def reallocate(
     answer was a human geocode, which overrides the allocator. Every entry carries the final
     penalty multiplier, i.e. the whole-list reading of R9.
     """
-    from geoagent.allocate import allocate
+    from astrolabio.allocate import allocate
 
     locations = final_locations(doc)
     if any(loc.get("origin") == "human_geocode" for loc in locations):
@@ -408,12 +408,13 @@ def load_exports(run_dir: Path) -> dict[str, dict[str, Any]]:
 def disable_tools(names: Iterable[str]) -> list[str]:
     """Switch tools off for an ablation run; returns the names switched off.
 
-    Settings has no per-tool flag, so this edits the process-wide tool tables: the tool leaves
-    the definitions the model is sent, and its handler becomes a free error in case it is still
-    called. Only meaningful in a process that exits after the run.
+    This is the CLI's switch and edits the process-wide tool tables: the tool leaves the
+    definitions the model is sent, and its handler becomes a free error in case it is still
+    called. Only meaningful in a process that exits after the run; a long-lived one sets
+    Settings.disabled_tools instead (eval_settings(disabled_tools=...)), which is per run.
     """
-    from geoagent.tools import registry, schemas
-    from geoagent.tools.base import ToolContext, ToolResult
+    from astrolabio.tools import registry, schemas
+    from astrolabio.tools.base import ToolContext, ToolResult
 
     off = {name.strip() for name in names if name.strip()}
     groups = (schemas.LOCAL_TOOLS, schemas.HUMAN_TOOLS, schemas.WEB_CLIENT_TOOLS)
@@ -460,10 +461,26 @@ async def drive(manager: Any, tasks: Sequence[PanoramaTask], truths: Mapping[str
     return manager.export_all()
 
 
-def eval_settings(*, effort: str | None, hedge: bool, allow_web: bool, runs_dir: Path | None) -> Any:
-    from geoagent.config import load_settings
+def eval_settings(
+    *,
+    effort: str | None,
+    hedge: bool,
+    allow_web: bool,
+    runs_dir: Path | None,
+    disabled_tools: Iterable[str] | None = None,
+) -> Any:
+    """`disabled_tools` switches tools off through Settings, for this run only: unlike
+    disable_tools it leaves the process-wide tables alone, so a long-lived server can use it."""
+    from astrolabio.config import load_settings
+    from astrolabio.tools.schemas import validate_disabled_tools
 
-    settings = load_settings(no_human=True, hedge=hedge, allow_web=allow_web, runs_dir=runs_dir)
+    settings = load_settings(
+        no_human=True,
+        hedge=hedge,
+        allow_web=allow_web,
+        runs_dir=runs_dir,
+        disabled_tools=validate_disabled_tools(disabled_tools),
+    )
     if effort is None:
         return settings
     return settings.model_copy(
@@ -509,7 +526,7 @@ def run(
     runs_dir: Path = typer.Option(None, help="Parent directory for runs (default: settings.runs_dir)."),
 ) -> None:
     """Run the agent over the eval set in --no-human mode and score it. Calls the OpenAI API."""
-    from geoagent.runner import RunManager
+    from astrolabio.runner import RunManager
 
     entries, truths = _load_ground_truth(data)
     tasks = tasks_from_manifest(entries[:limit] if limit else entries, data)
@@ -544,6 +561,26 @@ def run(
     _report(run_dir, build_results(manager.run_id, config, scores))
 
 
+def rescore_config(hedge: bool | None, duplicates: bool, manifest: Path, panoramas: int) -> dict[str, Any]:
+    """The `config` block of a rescored results file (the console writes the same one)."""
+    reallocating = hedge is not None or not duplicates
+    return {
+        "mode": "rescore",
+        "reallocated": reallocating,
+        "hedge": bool(hedge) if reallocating else None,
+        "allow_duplicates": duplicates if reallocating else None,
+        "manifest": str(manifest),
+        "panoramas": panoramas,
+    }
+
+
+def rescore_tag(hedge: bool | None, duplicates: bool) -> str:
+    """The suffix of a rescored results file when none is given: named after what was changed."""
+    if hedge is None and duplicates:
+        return "rescore"
+    return ("hedge" if hedge else "nohedge") + ("" if duplicates else "-distinct")
+
+
 @app.command()
 def rescore(
     run_dir: Path = typer.Argument(..., help="Run directory holding the per-panorama exports."),
@@ -565,16 +602,9 @@ def rescore(
     if not scores:
         typer.echo(f"None of the {len(exports)} exports in {run_dir} match a panorama_id in the manifest.", err=True)
         raise typer.Exit(code=2)
-    config = {
-        "mode": "rescore",
-        "reallocated": reallocating,
-        "hedge": bool(hedge) if reallocating else None,
-        "allow_duplicates": duplicates if reallocating else None,
-        "manifest": str(data / MANIFEST_NAME),
-        "panoramas": len(scores),
-    }
+    config = rescore_config(hedge, duplicates, data / MANIFEST_NAME, len(scores))
     if tag is None:
-        tag = "rescore" if not reallocating else ("hedge" if hedge else "nohedge") + ("" if duplicates else "-distinct")
+        tag = rescore_tag(hedge, duplicates)
     _report(run_dir, build_results(run_dir.name, config, scores), tag=tag)
 
 

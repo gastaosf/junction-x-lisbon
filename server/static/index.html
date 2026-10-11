@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>geoagent operator</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<title>astrolabio operator</title>
+<link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+<script src="/static/vendor/leaflet/leaflet.js"></script>
 <style>
 :root {
   --bg: #0d1117; --panel: #151b23; --panel2: #1c232d; --line: #2b3440; --text: #dbe2ea; --dim: #8492a3;
@@ -144,7 +144,7 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; }
 </head>
 <body>
 <header>
-  <h1>geoagent operator</h1>
+  <h1>astrolabio operator</h1>
   <span id="conn" title="event stream"></span>
   <span class="meta dim" id="run-id"></span>
   <span class="badge" id="mode"></span>
@@ -185,7 +185,7 @@ function fmtClock(s) {
   s = Math.max(0, Math.floor(s || 0));
   return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
 }
-const panoUrl = (id, rest) => "/api/pano/" + encodeURIComponent(id) + rest;
+const panoUrl = (id, rest) => "api/pano/" + encodeURIComponent(id) + rest;
 
 function toast(message, info) {
   const node = el("div", "toast" + (info ? " info" : ""), message);
@@ -707,12 +707,12 @@ function tick() {
   const alert = document.getElementById("mcq-alert");
   alert.hidden = asking === 0;
   alert.textContent = asking + " MCQ waiting";
-  document.title = (asking ? "(" + asking + " MCQ) " : "") + "geoagent operator";
+  document.title = (asking ? "(" + asking + " MCQ) " : "") + "astrolabio operator";
 }
 
 function connect() {
   const dot = document.getElementById("conn");
-  const es = new EventSource("/api/stream");
+  const es = new EventSource("api/stream");
   es.onopen = () => dot.classList.add("up");
   es.onerror = () => dot.classList.remove("up");  // EventSource reconnects on its own
   es.addEventListener("snapshot", (e) => {
@@ -728,11 +728,11 @@ function connect() {
 
 document.getElementById("finalize-all").onclick = async () => {
   if (!window.confirm("Finalize ALL panoramas with their current best lists?")) return;
-  const res = await api("POST", "/api/finalize_all");
+  const res = await api("POST", "api/finalize_all");
   if (res.ok) applyState(res.data); else toast(errorText(res));
 };
 document.getElementById("export").onclick = async () => {
-  const res = await api("POST", "/api/export");
+  const res = await api("POST", "api/export");
   if (res.ok) toast("Exported " + res.data.paths.length + " files:\n" + res.data.paths.join("\n"), true);
   else toast(errorText(res));
 };
@@ -740,7 +740,7 @@ document.getElementById("export").onclick = async () => {
 connect();
 setInterval(tick, 500);
 // Safety net for state changes that emit no event.
-setInterval(async () => { const res = await api("GET", "/api/state"); if (res.ok) applyState(res.data); }, 5000);
+setInterval(async () => { const res = await api("GET", "api/state"); if (res.ok) applyState(res.data); }, 5000);
 </script>
 </body>
 </html>

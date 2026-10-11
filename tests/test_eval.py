@@ -20,8 +20,8 @@ from typer.testing import CliRunner
 from eval import build_set, run_eval
 from eval.build_set import AREAS, Area
 from eval.run_eval import Truth
-from geoagent.schema import Label, PanoramaTask
-from geoagent.tools import schemas
+from astrolabio.schema import Label, PanoramaTask
+from astrolabio.tools import schemas
 
 LISBON = (38.713900, -9.139400)
 PORTO = (41.145600, -8.611000)
@@ -381,15 +381,15 @@ def tool_tables(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
     for name in ("LOCAL_TOOLS", "HUMAN_TOOLS", "WEB_CLIENT_TOOLS"):
         monkeypatch.setattr(schemas, name, list(getattr(schemas, name)))
     monkeypatch.setattr(schemas, "server_tools", schemas.server_tools)
-    registry = types.ModuleType("geoagent.tools.registry")
+    registry = types.ModuleType("astrolabio.tools.registry")
     registry.HANDLERS = {"satellite_tile": object(), "view_crop": object()}  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "geoagent.tools.registry", registry)
-    monkeypatch.setattr("geoagent.tools.registry", registry, raising=False)
+    monkeypatch.setitem(sys.modules, "astrolabio.tools.registry", registry)
+    monkeypatch.setattr("astrolabio.tools.registry", registry, raising=False)
     return registry
 
 
 async def test_disable_tools_removes_definitions_and_handlers(tool_tables: types.ModuleType) -> None:
-    from geoagent.config import Settings
+    from astrolabio.config import Settings
 
     untouched = tool_tables.HANDLERS["view_crop"]
     assert run_eval.disable_tools(["satellite_tile", " web_search", ""]) == ["satellite_tile", "web_search"]
@@ -405,7 +405,7 @@ async def test_disable_tools_removes_definitions_and_handlers(tool_tables: types
 
 
 def test_disable_tools_leaves_hosted_tools_alone_unless_named(tool_tables: types.ModuleType) -> None:
-    from geoagent.config import Settings
+    from astrolabio.config import Settings
 
     assert run_eval.disable_tools(["satellite_tile"]) == ["satellite_tile"]
     assert schemas.tool_definitions(Settings())[-1]["type"] == "web_search"
@@ -504,6 +504,43 @@ def test_fetch_area_sends_the_documented_query() -> None:
     params = request.url.params
     assert params["fields"] == build_set.FIELDS and params["is_pano"] == "true" and params["limit"] == "7"
     assert [float(v) for v in params["bbox"].split(",")] == pytest.approx(list(area.bbox))
+
+
+def test_fetch_area_searches_smaller_cells_when_the_whole_box_is_refused() -> None:
+    """A dense city centre answers the whole box with a 500; its cells still answer."""
+    area = AREAS[0]
+    whole = ",".join(f"{v:.6f}" for v in area.bbox)
+    boxes: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bbox = request.url.params["bbox"]
+        boxes.append(bbox)
+        if bbox == whole or len(boxes) == 2:  # the whole box and the first cell both fail
+            return httpx.Response(500, json={"error": {"code": 1}})
+        return httpx.Response(200, json={"data": [raw_image("1"), raw_image(str(len(boxes)))]})
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        candidates = build_set.fetch_area(client, "tok", area, limit=100)
+
+    assert boxes[0] == whole and len(boxes) == 1 + build_set._MAX_CELLS
+    assert set(boxes[1:]) <= {",".join(f"{v:.6f}" for v in cell) for cell in build_set.grid_cells(area)}
+    ids = [c["id"] for c in candidates]
+    assert len(ids) == len(set(ids)) == build_set._MAX_CELLS  # "1" once, plus one new image per answering cell
+
+
+def test_fetch_area_raises_when_no_cell_answers_and_on_client_errors() -> None:
+    area = AREAS[0]
+    for status, requests_made in ((500, 1 + build_set._MAX_CELLS), (401, 1)):
+        seen: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(request)
+            return httpx.Response(status, json={"error": {}})
+
+        with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+            with pytest.raises(httpx.HTTPStatusError):
+                build_set.fetch_area(client, "tok", area)
+        assert len(seen) == requests_made
 
 
 def candidates_by_area() -> dict[str, list[dict[str, Any]]]:

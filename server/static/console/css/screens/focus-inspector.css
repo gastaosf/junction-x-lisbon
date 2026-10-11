@@ -1,0 +1,748 @@
+/*
+  The inspector of the panorama focus and replay screen (js/screens/focus/inspector.js).
+
+    .insp > .insp-head (.insp-tabs + .insp-status) + .insp-state | .insp-body > .insp-pane-<tab>
+
+  The inspector is a size container, so its two-column layouts fold by its own width and not the
+  window's: the focus screen may give it the whole page or a column of it.
+  Rows that had not happened yet at the scrubber's position carry .is-later.
+  Tokens only. The penalty colour is not used here: the ledger records charges, it is no control.
+*/
+
+.insp {
+  container-type: inline-size;
+  container-name: insp;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+.insp-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s-1) var(--s-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.insp-tabs {
+  flex: 0 1 auto;
+  border-bottom: 0;
+}
+
+.insp-tab {
+  gap: 0.45em;
+}
+
+.insp-tab-count {
+  min-width: 1.5em;
+  padding: 0 0.4em;
+  border-radius: 999px;
+  background: var(--panel-3);
+  color: var(--dim);
+  font-size: var(--fs-xs);
+  font-weight: 550;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.insp-tab-count:empty {
+  display: none;
+}
+
+.insp-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--s-1) var(--s-3);
+  min-height: 2.4rem;
+  min-width: 0;
+  padding-bottom: 0.2rem;
+}
+
+.insp-state .empty {
+  padding: var(--s-6) var(--s-4);
+}
+
+.insp-error {
+  align-items: flex-start;
+}
+
+.insp-body,
+.insp-pane,
+.insp-pane-inner {
+  min-width: 0;
+}
+
+.insp-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.insp-section > .section-title {
+  margin: 0;
+}
+
+/* dom.copyButton is a square icon button; here it carries its label. */
+.insp-copy.copy-btn {
+  width: auto;
+  padding: 0.1rem 0.55rem;
+  border-color: var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+
+.insp-copy.copy-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.insp-copy .copy-mark {
+  display: inline-flex;
+}
+
+.insp .is-later {
+  opacity: 0.45;
+}
+
+/* button.small brings side padding that would squeeze the icon of a square button. */
+.insp .icon-btn.small {
+  padding: 0;
+  font-size: var(--fs-md);
+}
+
+/* ------------------------------------------------------------------ filters */
+
+.insp-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--s-2) var(--s-3);
+}
+
+.insp-filter > .check,
+.insp-filter > button,
+.insp-filter > .insp-count {
+  min-height: var(--control-h);
+}
+
+.insp-filter > .insp-count {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+}
+
+.insp-field {
+  min-width: 9rem;
+}
+
+.insp-field.grow {
+  flex: 1 1 14rem;
+}
+
+.insp-select,
+.insp-search {
+  width: 100%;
+}
+
+/* ------------------------------------------------------------------ turns */
+
+.insp-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: var(--s-2);
+}
+
+.insp-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--panel);
+}
+
+.insp-stat-label {
+  color: var(--dim);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.insp-stat-value {
+  color: var(--text-strong);
+  font-size: var(--fs-xl);
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.insp-stat-note {
+  font-size: var(--fs-xs);
+}
+
+.insp-chart {
+  height: 17rem;
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  background: var(--panel);
+}
+
+.insp-truth-chart {
+  height: 15rem;
+}
+
+.insp-table td {
+  white-space: nowrap;
+}
+
+.insp-table .insp-th-group {
+  border-bottom: 1px solid var(--line);
+  text-align: center;
+}
+
+.insp-turn-table thead tr:first-child th {
+  vertical-align: bottom;
+}
+
+.insp-turn-btn {
+  min-width: 2.2rem;
+  min-height: 1.6rem;
+  padding: 0 0.4rem;
+  color: var(--text-strong);
+  font-weight: 650;
+}
+
+.insp-actions {
+  text-align: right;
+}
+
+.insp-actions > button {
+  vertical-align: middle;
+}
+
+/* Fixed slots, so the buttons line up down the column whatever a turn holds. */
+.insp-turn-actions {
+  display: grid;
+  grid-template-columns: 4.6rem 4.9rem 1.7rem 1.7rem;
+  align-items: center;
+  justify-items: start;
+  gap: var(--s-1);
+}
+
+.insp-table tr.insp-subrow td {
+  padding-left: 2.6rem;
+  border-top: 0;
+  background: var(--bg-sunk);
+  font-size: var(--fs-sm);
+  white-space: normal;
+}
+
+.insp-table tr.insp-segment td {
+  padding-left: 0.7rem;
+  border-top: 1px solid var(--line-strong);
+  color: var(--dim);
+}
+
+.insp-table tr.insp-total td {
+  border-top: 1px solid var(--line-strong);
+  color: var(--text-strong);
+  font-weight: 650;
+}
+
+/* ------------------------------------------------------------------ tools */
+
+.insp-split {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: var(--s-3);
+  align-items: start;
+}
+
+.insp-call-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.insp-call-list {
+  max-height: min(56rem, 82vh);
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  background: var(--panel);
+}
+
+.insp-list-empty {
+  padding: var(--s-5) var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+}
+
+button.insp-call {
+  display: grid;
+  grid-template-columns: 3rem 1.9rem minmax(5.5rem, 10.5rem) minmax(0, 1fr) auto 4.9rem;
+  align-items: center;
+  justify-content: stretch;
+  gap: 0 var(--s-2);
+  width: 100%;
+  min-height: 2.05rem;
+  padding: 0.15rem var(--s-2);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  font-weight: 400;
+  text-align: left;
+  /* Rows off screen are neither laid out nor painted: a run can make several hundred calls. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 2.05rem;
+}
+
+button.insp-call:last-child {
+  border-bottom: 0;
+}
+
+button.insp-call:hover:not(:disabled) {
+  background: var(--panel-2);
+}
+
+button.insp-call:focus-visible {
+  outline-offset: -2px;
+}
+
+button.insp-call.selected,
+button.insp-call.selected:hover:not(:disabled) {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+button.insp-call.is-error .insp-call-name {
+  color: var(--bad);
+}
+
+.insp-call-name,
+.insp-call-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.insp-call-name {
+  color: var(--text-strong);
+  font-size: var(--fs-sm);
+}
+
+.insp-call-summary {
+  color: var(--dim);
+  font-size: var(--fs-sm);
+}
+
+.insp-call-flags {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+}
+
+.insp-call-images {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2em;
+  font-size: var(--fs-xs);
+}
+
+.insp-call-ms {
+  font-size: var(--fs-sm);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.insp-call-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+  max-height: min(56rem, 82vh);
+  padding: var(--s-3) var(--s-4);
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  background: var(--panel);
+}
+
+.insp-detail-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.insp-detail-title {
+  margin: 0;
+  font-size: var(--fs-lg);
+  overflow-wrap: anywhere;
+}
+
+.insp-urls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+}
+
+.insp-url {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  width: 100%;
+  padding: 0.1rem 0 0.1rem var(--s-2);
+  border-left: 2px solid var(--line);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+}
+
+.insp-url > .mono {
+  padding-top: 0.25rem;
+  user-select: all;
+}
+
+.insp-output {
+  max-height: 24rem;
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: 1.55;
+}
+
+.insp-output.is-error {
+  border-color: var(--bad-line);
+  background: var(--bad-soft);
+}
+
+.insp-call-detail .json-tree {
+  max-height: 24rem;
+  overflow-y: auto;
+}
+
+/* ------------------------------------------------------------------ thumbnails */
+
+button.insp-thumb {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--r-2);
+  background: var(--bg-sunk);
+  cursor: zoom-in;
+}
+
+.insp-thumb-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+button.insp-thumb.is-missing {
+  flex-direction: column;
+  gap: 0.2rem;
+  color: var(--dim);
+  font-weight: 400;
+  cursor: default;
+  opacity: 1;
+}
+
+.insp-returned {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.insp-returned-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  width: 9rem;
+  margin: 0;
+}
+
+.insp-returned-thumb {
+  width: 9rem;
+  height: 9rem;
+}
+
+.insp-compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-3);
+}
+
+.insp-compare-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+  margin: 0;
+}
+
+.insp-compare-thumb {
+  width: 100%;
+  aspect-ratio: 1;
+  max-height: 30rem;
+}
+
+/* ------------------------------------------------------------------ images */
+
+.insp-meters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-3);
+}
+
+.insp-meter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  background: var(--panel);
+}
+
+.insp-meter-label {
+  color: var(--dim);
+  font-size: var(--fs-sm);
+  font-weight: 650;
+}
+
+.insp-meter-value {
+  font-size: var(--fs-lg);
+}
+
+.insp-meter .progress {
+  height: 0.6rem;
+}
+
+.insp-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13.5rem, 1fr));
+  gap: var(--s-3);
+}
+
+.insp-view {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  background: var(--panel);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 13.5rem auto 15.5rem;
+}
+
+.insp-view.is-highlight {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+button.insp-view-thumb {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+
+/* The number drawn on this crop's footprint in the panorama viewer. */
+.insp-view-n {
+  position: absolute;
+  top: 0.25rem;
+  left: 0.25rem;
+  min-width: 1.5em;
+  padding: 0 0.35em;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-1);
+  background: var(--panel);
+  color: var(--text-strong);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.insp-view-caption {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  padding: var(--s-1) var(--s-2) var(--s-2);
+}
+
+.insp-view-caption > div {
+  min-width: 0;
+}
+
+.insp-view-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.7em;
+}
+
+.insp-view-facts > span {
+  white-space: nowrap;
+}
+
+.insp-view-caption > .row {
+  min-height: 1.7rem;
+}
+
+.insp-view-caption > .row > .grow {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ ledger */
+
+.insp-ledger-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  background: var(--panel);
+}
+
+.insp-ledger-now {
+  font-size: var(--fs-lg);
+}
+
+.insp-pane-ledger .empty {
+  padding: var(--s-6) var(--s-4);
+}
+
+/* ------------------------------------------------------------------ facts */
+
+.insp-facts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(21rem, 1fr));
+  gap: var(--s-3);
+}
+
+.insp-facts-grid > .card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-4);
+}
+
+.insp-facts-grid .section-title {
+  margin: 0;
+}
+
+.insp-kv > dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0 var(--s-1);
+  min-width: 0;
+}
+
+.insp-kv-value {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* A long value wraps inside its own box, so its copy button stays beside the first line. */
+.insp-kv-value:has(+ .copy-btn) {
+  max-width: calc(100% - 2rem);
+}
+
+.insp-kv > dd > .copy-btn {
+  margin-top: -0.2rem;
+}
+
+.insp-kv > dd > .small {
+  flex-basis: 100%;
+}
+
+.insp-downloads a.btn[aria-disabled="true"] {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.insp-downloads .notice {
+  align-items: flex-start;
+}
+
+.insp-prompt {
+  max-height: 30rem;
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: 1.55;
+}
+
+.insp-pane-facts .json-tree {
+  max-height: 30rem;
+  overflow-y: auto;
+}
+
+/* ------------------------------------------------------------------ truth */
+
+.insp-truth-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: var(--s-3);
+  align-items: start;
+}
+
+.insp-truth-map {
+  height: 26rem;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+}
+
+.insp-truth-facts {
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------------ narrow inspector */
+
+@container insp (max-width: 62rem) {
+  .insp-split,
+  .insp-truth-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .insp-call-list {
+    max-height: 18rem;
+  }
+
+  .insp-call-detail {
+    max-height: none;
+  }
+}
+
+@container insp (max-width: 40rem) {
+  .insp-meters,
+  .insp-compare {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

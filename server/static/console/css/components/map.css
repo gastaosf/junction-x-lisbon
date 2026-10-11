@@ -1,0 +1,307 @@
+/* Map (js/components/map.js): the Leaflet wrapper, its marks and its chrome.
+ *
+ * Marks are coloured here, by class, not in JavaScript, so both themes work without redrawing.
+ * Two things decide a colour: the theme (chrome, labels, the coordinate grid) and the basemap
+ * under the marks (street tiles are always light, imagery is dark, the grid is the theme
+ * background). --geomap-ink / --geomap-halo follow the basemap. */
+
+.geomap {
+  --geomap-bg: var(--panel-2, #10151b);
+  /* Drawn at 40% opacity on the canvas (map.js). */
+  --geomap-grid-line: var(--dim, #8492a3);
+  --geomap-grid-label: var(--dim, #8492a3);
+  --geomap-hyp: var(--accent, #58a6ff);
+  --geomap-provisional: var(--provisional, #d29922);
+  --geomap-final: var(--final, #3fb950);
+  /* The pin is the last-resort geocode, a penalised control: the one use of --penalty here. */
+  --geomap-pin: var(--penalty, #e04fb5);
+  --geomap-chrome: var(--panel, #151b23);
+  --geomap-chrome-line: var(--line, #2b3440);
+  --geomap-text: var(--text, #dbe2ea);
+  --geomap-dim: var(--dim, #8492a3);
+  /* Street tiles: dark ink with a light halo. */
+  --geomap-ink: #17202b;
+  --geomap-halo: #ffffff;
+
+  position: relative;
+  /* Leaflet stacks its panes up to z-index 1000: keep them inside the map. */
+  isolation: isolate;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  min-height: var(--geomap-min-height, 12rem);
+  border-radius: 5px;
+  background: var(--geomap-bg);
+  color: var(--geomap-text);
+}
+/* base.css caps every svg, canvas and img at `max-width: 100%`. Leaflet lifts that for its own
+   panes only, and map.js draws hypothesis circles, rings, clusters, paths and truth lines in panes
+   of its own. A pane is a zero-width box, so the cap made each of those drawings 0 px wide and
+   nothing showed. Lift it for everything a pane holds, on every map. */
+.geomap .leaflet-pane > svg,
+.geomap .leaflet-pane > canvas,
+.geomap .leaflet-pane img {
+  max-width: none;
+  max-height: none;
+}
+.geomap.is-satellite { --geomap-ink: #ffffff; --geomap-halo: #000000; }
+/* Tiles did not load: the marks sit on the theme background. */
+.geomap.is-offline { --geomap-ink: var(--geomap-text); --geomap-halo: var(--geomap-bg); }
+
+.geomap-canvas { position: absolute; inset: 0; }
+.geomap .leaflet-container {
+  background: var(--geomap-bg);
+  color: var(--geomap-text);
+  font: inherit;
+  outline: none;
+}
+.geomap .leaflet-container:focus-visible { outline: 2px solid var(--accent, #58a6ff); outline-offset: -2px; }
+
+.geomap.is-unavailable {
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--geomap-chrome-line);
+  background: transparent;
+  color: var(--geomap-dim);
+  font-size: 0.75rem;
+  font-style: italic;
+}
+
+/* ---- Leaflet chrome, restyled to the console ---- */
+
+.geomap .leaflet-bar { overflow: hidden; border: 1px solid var(--geomap-chrome-line); border-radius: 5px; box-shadow: none; }
+.geomap .leaflet-bar a {
+  width: 26px;
+  height: 26px;
+  border-bottom: 1px solid var(--geomap-chrome-line);
+  background: var(--geomap-chrome);
+  color: var(--geomap-text);
+  font-size: 16px;
+  line-height: 26px;
+}
+.geomap .leaflet-bar a:last-child { border-bottom: 0; }
+.geomap .leaflet-bar a:hover { background: var(--panel-2, #1c232d); color: var(--geomap-text); }
+.geomap .leaflet-bar a:focus-visible { outline: 2px solid var(--accent, #58a6ff); outline-offset: -2px; }
+.geomap .leaflet-bar a.leaflet-disabled { background: var(--geomap-chrome); color: var(--geomap-dim); opacity: 0.55; }
+
+.geomap .leaflet-control-attribution {
+  padding: 0 5px;
+  background: var(--geomap-chrome);
+  color: var(--geomap-dim);
+  font-size: 10px;
+  line-height: 1.6;
+  opacity: 0.9;
+}
+.geomap .leaflet-control-scale-line {
+  border-color: var(--geomap-text);
+  background: var(--geomap-chrome);
+  color: var(--geomap-text);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+  text-shadow: none;
+  opacity: 0.9;
+}
+
+/* ---- tools: layer switch and fit ---- */
+
+.geomap-tools {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.geomap-tools[hidden], .geomap-note[hidden], .geomap-hint[hidden] { display: none; }
+.geomap-switch { display: inline-flex; overflow: hidden; border: 1px solid var(--geomap-chrome-line); border-radius: 5px; }
+.geomap-btn {
+  min-height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 0;
+  background: var(--geomap-chrome);
+  color: var(--geomap-dim);
+  font: inherit;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+.geomap-switch .geomap-btn + .geomap-btn { border-left: 1px solid var(--geomap-chrome-line); }
+.geomap-btn:hover { color: var(--geomap-text); }
+.geomap-btn:focus-visible { outline: 2px solid var(--accent, #58a6ff); outline-offset: -2px; }
+/* The chosen layer is marked by weight and an underline as well as by tone. */
+.geomap-btn[aria-pressed="true"] { background: var(--panel-2, #1c232d); color: var(--geomap-text); box-shadow: inset 0 -2px 0 var(--accent, #58a6ff); }
+.geomap-fit {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--geomap-chrome-line);
+  border-radius: 5px;
+  color: var(--geomap-text);
+}
+.geomap-fit svg { width: 14px; height: 14px; }
+/* The operator moved the view and newer data has not been fitted. */
+.geomap-fit.is-stale { border-color: var(--accent, #58a6ff); color: var(--accent, #58a6ff); }
+
+.geomap-note,
+.geomap-hint {
+  position: absolute;
+  left: 8px;
+  z-index: 1001;
+  max-width: calc(100% - 16px);
+  padding: 2px 7px;
+  border: 1px solid var(--geomap-chrome-line);
+  border-radius: 4px;
+  background: var(--geomap-chrome);
+  color: var(--geomap-dim);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  pointer-events: none;
+}
+.geomap-note { bottom: 30px; }
+.geomap-hint { bottom: 56px; border-color: var(--geomap-pin); color: var(--geomap-text); }
+
+/* A frame above the tiles (an outline on the box itself would be painted under them). */
+.geomap.is-pinning::after {
+  position: absolute;
+  inset: 0;
+  z-index: 1002;
+  border: 2px solid var(--geomap-pin);
+  border-radius: inherit;
+  content: "";
+  pointer-events: none;
+}
+.geomap.is-pinning .leaflet-grab,
+.geomap.is-pinning .leaflet-interactive { cursor: crosshair; }
+
+/* ---- vector marks (classes set through Leaflet's className option) ---- */
+
+.geomap-hyp { stroke: var(--geomap-hyp); fill: var(--geomap-hyp); filter: drop-shadow(0 0 1px var(--geomap-halo)); }
+.geomap-hyp.is-highlight { stroke: var(--geomap-ink); stroke-width: 3; fill-opacity: 0.8; }
+.geomap-ring { stroke: var(--geomap-hyp); fill: var(--geomap-hyp); }
+.geomap-ring.is-highlight { stroke-width: 2; fill-opacity: 0.18; }
+.geomap-cluster { stroke: var(--geomap-ink); stroke-dasharray: 4 4; fill: var(--geomap-ink); filter: drop-shadow(0 0 1px var(--geomap-halo)); }
+
+.geomap-line { fill: none; stroke: var(--geomap-ink); filter: drop-shadow(0 0 1px var(--geomap-halo)); }
+.geomap-line-truth { stroke-dasharray: 7 5; }
+/* Distance bands differ by dash as well as by colour. */
+.geomap-band-100m { stroke: var(--ok, #3fb950); }
+.geomap-band-1km { stroke: var(--accent, #58a6ff); stroke-dasharray: 10 4; }
+.geomap-band-10km { stroke: var(--warn, #d29922); stroke-dasharray: 5 5; }
+.geomap-band-far { stroke: var(--bad, #f85149); stroke-dasharray: 1 6; stroke-linecap: round; }
+
+.geomap-path { fill: none; stroke: var(--geomap-ink); stroke-dasharray: 1 6; stroke-linecap: round; stroke-opacity: 0.8; filter: drop-shadow(0 0 1px var(--geomap-halo)); }
+.geomap-path-dot { stroke: var(--geomap-halo); fill: var(--geomap-ink); }
+
+/* ---- labelled points (divIcons): shape and word carry the meaning, colour supports it ---- */
+
+.geomap-icon { overflow: visible; }
+.geomap-pt { position: absolute; top: 0; left: 0; }
+.geomap-icon.leaflet-interactive .geomap-pt-glyph,
+.geomap-icon.leaflet-interactive .geomap-pt-label { pointer-events: auto; }
+
+.geomap-pt-glyph {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: var(--geomap-hyp);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.65);
+  transform: translate(-50%, -50%);
+}
+.geomap-pt-glyph svg { display: block; width: 100%; height: 100%; }
+
+.geomap-pt-label,
+.geomap .leaflet-tooltip.geomap-tip {
+  padding: 0 5px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--bg, #0d1117);
+  background: color-mix(in srgb, var(--bg, #0d1117) 88%, transparent);
+  box-shadow: none;
+  color: var(--geomap-text);
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.geomap .leaflet-tooltip.geomap-tip::before { display: none; }
+/* Caller labels are shown as written (they can be panorama ids); the words this module adds
+ * itself (FINAL, PROVISIONAL, TRUTH) are written in capitals in map.js. */
+.geomap-pt-label { position: absolute; top: -0.75em; left: 12px; font-weight: 600; letter-spacing: 0.02em; }
+
+/* Answer: a diamond, amber while provisional, green with a tick once final. */
+.geomap-pt-answer .geomap-pt-glyph,
+.geomap-pt-entry .geomap-pt-glyph {
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--geomap-provisional);
+  color: #ffffff;
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+.geomap-pt-answer.is-final .geomap-pt-glyph,
+.geomap-pt-entry.is-final .geomap-pt-glyph { background: var(--geomap-final); }
+.geomap-pt-answer.is-final .geomap-pt-glyph { width: 16px; height: 16px; }
+.geomap-pt-answer .geomap-pt-glyph svg { transform: rotate(-45deg); }
+/* Below the point: the percentage of the hypothesis under it sits to the right. */
+.geomap-pt-answer .geomap-pt-label,
+.geomap-pt-entry .geomap-pt-label { top: 13px; left: 0; transform: translateX(-50%); }
+.geomap-pt-answer .geomap-pt-label { box-shadow: inset 0 2px 0 var(--geomap-provisional); }
+.geomap-pt-answer.is-final .geomap-pt-label { box-shadow: inset 0 2px 0 var(--geomap-final); }
+/* The other distinct entries of a hedged list: the same diamond, smaller, with their ranks. */
+.geomap-pt-entry .geomap-pt-glyph { width: 8px; height: 8px; border-width: 1.5px; }
+.geomap-pt-entry .geomap-pt-label { top: 9px; font-weight: 500; }
+
+/* Truth (evaluation only): a star that reads on any basemap. */
+.geomap-pt-truth .geomap-pt-glyph { width: 22px; height: 22px; border: 0; background: none; box-shadow: none; }
+.geomap-pt-truth .geomap-pt-glyph svg { overflow: visible; fill: #ffffff; stroke: #000000; stroke-width: 1.4; stroke-linejoin: round; paint-order: stroke; }
+.geomap-pt-truth .geomap-pt-label { top: auto; bottom: 13px; left: 0; transform: translateX(-50%); }
+
+.geomap-pt-eval .geomap-pt-label,
+.geomap-pt-option .geomap-pt-label { font-weight: 500; letter-spacing: 0; }
+.geomap-pt-option .geomap-pt-glyph { border-color: #000000; border-radius: 2px; background: #ffffff; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7); }
+
+/* The geocode pin: its tip is the point. */
+.geomap-pt-pin .geomap-pt-glyph {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  transform: translate(-50%, -96%);
+  cursor: grab;
+}
+.geomap-pt-pin .geomap-pt-glyph svg { overflow: visible; fill: var(--geomap-pin); stroke: #ffffff; stroke-width: 1; paint-order: stroke; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6)); }
+.geomap-pt-pin .geomap-pin-eye { fill: #ffffff; stroke: none; }
+.geomap-pt-pin .geomap-pt-label { top: 6px; left: 0; box-shadow: inset 0 -2px 0 var(--geomap-pin); letter-spacing: 0; transform: translateX(-50%); }
+.geomap-pt-pin .geomap-pt-label:empty { display: none; }
+
+/* ---- popup (hypothesis details; all of it text nodes) ---- */
+
+.geomap .leaflet-popup-content-wrapper {
+  border: 1px solid var(--geomap-chrome-line);
+  border-radius: 6px;
+  background: var(--geomap-chrome);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  color: var(--geomap-text);
+}
+.geomap .leaflet-popup-tip { border: 1px solid var(--geomap-chrome-line); background: var(--geomap-chrome); box-shadow: none; }
+.geomap .leaflet-popup-content { margin: 10px 12px; font-size: 0.8125rem; line-height: 1.4; }
+.geomap .leaflet-container a.leaflet-popup-close-button { color: var(--geomap-dim); }
+.geomap .leaflet-container a.leaflet-popup-close-button:hover { color: var(--geomap-text); }
+.geomap-pop { display: grid; gap: 4px; min-width: 10rem; }
+.geomap-pop-title { font-weight: 650; overflow-wrap: anywhere; }
+.geomap-pop-meta,
+.geomap-pop-coord { color: var(--geomap-dim); font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+.geomap-pop-coord { user-select: all; }
+.geomap-pop-text { overflow-y: auto; max-height: 9rem; overflow-wrap: anywhere; white-space: pre-wrap; }

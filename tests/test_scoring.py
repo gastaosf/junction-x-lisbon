@@ -3,8 +3,8 @@ import random
 
 import pytest
 
-from geoagent.schema import Hypothesis, Label
-from geoagent.scoring import (
+from astrolabio.schema import Hypothesis, Label
+from astrolabio.scoring import (
     EARTH_RADIUS_M,
     RANK_WEIGHTS,
     effective_distance_m,

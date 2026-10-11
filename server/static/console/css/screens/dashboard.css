@@ -1,0 +1,491 @@
+/* Run dashboard (js/screens/dashboard.js, UI-SPEC 5.4). Everything is prefixed `dash-`; cards,
+ * buttons, badges, notices and the empty state come from base.css, the tiles from
+ * components/tile.css.
+ *
+ * Read from the top: what the run is and what can be done with it, the totals, then the clock
+ * strip, which stays under the shell while the grid scrolls, then the panoramas.
+ *
+ * Colour: tokens only. Nothing here uses --penalty: Finalize all and Stop run are harness
+ * controls, and a count of penalties used is a fact about the run, not a penalised control.
+ * Every coloured state also carries a word or an icon. */
+
+.dash-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+.dash-notice-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2) var(--s-4);
+  min-width: 0;
+}
+
+.dash-notice-body > :first-child {
+  flex: 1 1 28rem;
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------------ header */
+
+.dash-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+}
+
+.dash-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-3) var(--s-5);
+}
+
+.dash-title {
+  display: flex;
+  flex: 1 1 24rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+  min-width: 0;
+}
+
+.dash-run-id {
+  color: var(--text-strong);
+  font-size: var(--fs-xl);
+  overflow-wrap: anywhere;
+}
+
+.dash-slot {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.dash-slot:empty {
+  display: none;
+}
+
+.dash-kind {
+  font-weight: 550;
+}
+
+.dash-model {
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+.dash-controls {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--s-2);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.dash-control-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--s-2);
+}
+
+/* The two controls that end work, then the three that only go somewhere. */
+.dash-control-row > button.danger {
+  margin-right: var(--s-3);
+}
+
+.dash-busy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.dash-reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  max-width: 46rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dash-reasons > li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4em;
+}
+
+.dash-reasons .icon {
+  margin-top: 0.15em;
+}
+
+.dash-reasons strong {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.dash-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s-3) var(--s-5);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--line);
+}
+
+.dash-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.dash-stat-value {
+  color: var(--text-strong);
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.dash-stat[data-tone="ok"] .dash-stat-value {
+  color: var(--ok);
+}
+
+/* --warn, not --attn: the solid amber is a background colour and too pale as text on the light theme. */
+.dash-stat[data-tone="attn"] .dash-stat-detail {
+  color: var(--warn);
+  font-weight: 650;
+}
+
+.dash-stat[data-tone="warn"] .dash-stat-detail,
+.dash-stat[data-tone="cut"] .dash-stat-detail {
+  color: var(--warn);
+}
+
+.dash-stat-meter {
+  max-width: 16rem;
+  height: 0.25rem;
+  margin-top: 0.2rem;
+}
+
+/* ------------------------------------------------------------------ clock strip */
+
+.dash-strip {
+  position: sticky;
+  top: var(--shell-h);
+  z-index: var(--z-sticky);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-5);
+  /* Full bleed over the screen padding, so nothing of the grid shows beside it while scrolling. */
+  margin: 0 calc(-1 * var(--s-5));
+  padding: var(--s-2) var(--s-5);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.dash-clock {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: baseline;
+  gap: var(--s-2) var(--s-3);
+}
+
+.dash-clock-value {
+  color: var(--text-strong);
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.dash-clock-detail {
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.dash-clock-detail:empty {
+  display: none;
+}
+
+.dash-clock[data-tone="ok"] .dash-clock-detail {
+  color: var(--ok);
+}
+
+.dash-clock[data-tone="warn"] .dash-clock-detail {
+  color: var(--warn);
+}
+
+.dash-clock[data-tone="bad"] .dash-clock-value,
+.dash-clock[data-tone="bad"] .dash-clock-detail {
+  color: var(--bad);
+}
+
+.dash-clock[data-tone="dim"] .dash-clock-value,
+.dash-clock[data-tone="dim"] .dash-clock-detail {
+  color: var(--dim);
+}
+
+.dash-clock-set {
+  align-self: center;
+}
+
+.dash-clock-editor {
+  position: absolute;
+  top: calc(100% + var(--s-2));
+  left: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  width: 27rem;
+  max-width: calc(100vw - 2 * var(--s-5));
+  padding: var(--s-4);
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow);
+}
+
+.dash-editor-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.dash-editor-time {
+  width: 11rem;
+}
+
+.dash-editor-form .field-help:empty {
+  display: none;
+}
+
+.dash-editor-note {
+  margin: 0;
+}
+
+/* The phase guide: six steps of equal width, because it is read as a checklist and two of the
+   phases are three minutes long. The fill inside the current step shows how far through it is.
+   It needs 60rem to show every label, so at 1280 px it takes a line of its own under the clock. */
+.dash-phases {
+  display: grid;
+  flex: 1 1 60rem;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: var(--s-1);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dash-phase {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  padding: 0.15rem 0.5rem 0.3rem;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--panel);
+  color: var(--dim);
+  font-size: var(--fs-xs);
+  line-height: 1.3;
+}
+
+.dash-phase-line {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.dash-phase-label {
+  overflow: hidden;
+  font-weight: 650;
+  text-overflow: ellipsis;
+}
+
+.dash-phase-mark {
+  display: inline-flex;
+  flex: none;
+}
+
+.dash-phase-mark:empty,
+.dash-phase-left:empty {
+  display: none;
+}
+
+.dash-phase-left {
+  margin-left: auto;
+  font-weight: 650;
+}
+
+.dash-phase-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 0.2rem;
+  background: var(--line-strong);
+}
+
+.dash-phase[data-state="past"] .dash-phase-mark {
+  color: var(--ok);
+}
+
+.dash-phase[data-state="current"] {
+  border-color: var(--accent);
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--panel);
+  color: var(--text-strong);
+}
+
+.dash-phase[data-state="current"] .dash-phase-mark,
+.dash-phase[data-state="current"] .dash-phase-left {
+  color: var(--accent);
+}
+
+.dash-phase[data-state="current"] .dash-phase-fill {
+  background: var(--accent);
+}
+
+.dash-watchdog {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.4em;
+  color: var(--dim);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+.dash-watchdog[data-tone="warn"] {
+  color: var(--warn);
+  font-weight: 650;
+}
+
+.dash-watchdog[data-tone="bad"] {
+  color: var(--bad);
+  font-weight: 650;
+}
+
+/* ------------------------------------------------------------------ banner, toolbar */
+
+.dash-banner-slot:empty {
+  display: none;
+}
+
+.dash-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-4);
+  min-width: 0;
+}
+
+.dash-summary {
+  min-width: 0;
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+.dash-held {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.dash-confirm > p {
+  max-width: 44rem;
+}
+
+/* ------------------------------------------------------------------ the grid */
+
+.dash-cell {
+  min-width: 0;
+}
+
+.dash-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.dash-board {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+}
+
+/* A tile lays itself out in two columns from 44rem of its own width: two tiles side by side at
+   1280 px, more as the window grows. A single tile is not stretched across a projector. */
+.dash-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(44rem, 100%), 1fr));
+  align-items: start;
+  gap: var(--s-4);
+  min-width: 0;
+}
+
+/* The panorama that `c` and `/` act on. */
+.dash-tiles > .dash-cell.is-selected > .tile {
+  outline: 2px solid var(--accent-line);
+  outline-offset: 1px;
+}
+
+.dash-focus {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 21rem;
+  align-items: start;
+  gap: var(--s-4);
+  min-width: 0;
+}
+
+.dash-focus-main {
+  min-width: 0;
+}
+
+.dash-rail {
+  position: sticky;
+  top: calc(var(--shell-h) + var(--dash-strip-h, 0px) + var(--s-3));
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+  max-height: calc(100vh - var(--shell-h) - var(--dash-strip-h, 0px) - 2 * var(--s-3));
+  /* Room for the outline of the current row inside the scrolling box. */
+  padding: 2px;
+  overflow-y: auto;
+}
+
+.dash-rail-title {
+  margin: 0;
+}
+
+.dash-rail .dash-cell.is-current > .tile {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+  background: var(--panel-2);
+}
+
+.dash-empty {
+  padding: 0;
+}

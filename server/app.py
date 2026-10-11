@@ -20,12 +20,13 @@ from typing import Any, AsyncIterator
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from pydantic import BaseModel, Field, StrictBool
 
-from geoagent.schema import Label
-from geoagent.scoring import penalty_multiplier
-from geoagent.session import HumanChannelError, PanoramaSession
+from astrolabio.schema import Label
+from astrolabio.scoring import penalty_multiplier
+from astrolabio.session import HumanChannelError, PanoramaSession
 
 STATIC_DIR = Path(__file__).parent / "static"
 HEARTBEAT_S = 10.0
@@ -272,7 +273,7 @@ def _equirect_preview(session: PanoramaSession, width: int) -> Path:
 
 def create_app(manager: Any, *, heartbeat_s: float = HEARTBEAT_S) -> FastAPI:
     """`manager` is a RunManager (needs .sessions, .settings, .snapshot(), .finalize_all(), .export_all())."""
-    app = FastAPI(title="geoagent operator UI", docs_url=None, redoc_url=None)
+    app = FastAPI(title="astrolabio operator UI", docs_url=None, redoc_url=None)
     finished_at: dict[str, float] = {}  # elapsed time at which each panorama was first seen final
     live = bool(getattr(manager, "live", False))
 
@@ -497,5 +498,8 @@ def create_app(manager: Any, *, heartbeat_s: float = HEARTBEAT_S) -> FastAPI:
     @app.post("/api/export")
     async def export() -> dict[str, Any]:
         return {"ok": True, "paths": [str(p) for p in await export_now()]}
+
+    # The page loads the vendored Leaflet from here, so the map needs no internet beyond its tiles.
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     return app

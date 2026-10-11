@@ -19,14 +19,14 @@ from openai.types.responses import FunctionToolParam, WebSearchToolParam
 from openai.types.responses.response_create_params import ResponseCreateParamsStreaming
 from PIL import Image
 
-from geoagent.config import MODEL_PRICING, SPECIAL_BUDGET, STANDARD_BUDGET, Pricing, Settings, load_settings, pricing_for
-from geoagent.loop import build_request_params
-from geoagent.pano import Panorama
-from geoagent.schema import Label, PanoramaTask
-from geoagent.session import PanoramaSession
-from geoagent.tools import registry
-from geoagent.tools.base import ToolContext, ToolResult
-from geoagent.tools.schemas import tool_definitions
+from astrolabio.config import MODEL_PRICING, SPECIAL_BUDGET, STANDARD_BUDGET, Pricing, Settings, load_settings, pricing_for
+from astrolabio.loop import build_request_params
+from astrolabio.pano import Panorama
+from astrolabio.schema import Label, PanoramaTask
+from astrolabio.session import PanoramaSession
+from astrolabio.tools import registry
+from astrolabio.tools.base import ToolContext, ToolResult
+from astrolabio.tools.schemas import tool_definitions
 
 HYPOTHESIS = {
     "lat": 38.7223,
@@ -245,13 +245,13 @@ def test_pricing_follows_the_model() -> None:
 
 def test_model_and_image_detail_come_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     # blank, not deleted: load_settings re-reads .env, which fills in whatever is missing
-    monkeypatch.setenv("GEOAGENT_MODEL", "")
-    monkeypatch.setenv("GEOAGENT_IMAGE_DETAIL", "")
+    monkeypatch.setenv("ASTROLABIO_MODEL", "")
+    monkeypatch.setenv("ASTROLABIO_IMAGE_DETAIL", "")
     assert (load_settings().model, load_settings().image_detail) == ("gpt-6.1-sol", "original")
     assert load_settings().pricing == Pricing()
 
-    monkeypatch.setenv("GEOAGENT_MODEL", "gpt-6-astra")
-    monkeypatch.setenv("GEOAGENT_IMAGE_DETAIL", "high")
+    monkeypatch.setenv("ASTROLABIO_MODEL", "gpt-6-astra")
+    monkeypatch.setenv("ASTROLABIO_IMAGE_DETAIL", "high")
     settings = load_settings()
     assert (settings.model, settings.image_detail, settings.pricing) == ("gpt-6-astra", "high", MODEL_PRICING["gpt-6-astra"])
     # the price follows the final model, so a CLI override beats the environment for both
@@ -259,9 +259,9 @@ def test_model_and_image_detail_come_from_the_environment(monkeypatch: pytest.Mo
     assert load_settings(model="gpt-6-luna", pricing=Pricing(input=1.0)).pricing.input == 1.0
     assert load_settings(image_detail="low").image_detail == "low"
 
-    monkeypatch.setenv("GEOAGENT_IMAGE_DETAIL", "")  # a blank line in .env
+    monkeypatch.setenv("ASTROLABIO_IMAGE_DETAIL", "")  # a blank line in .env
     assert load_settings().image_detail == "original"
-    monkeypatch.setenv("GEOAGENT_IMAGE_DETAIL", "sharp")
+    monkeypatch.setenv("ASTROLABIO_IMAGE_DETAIL", "sharp")
     with pytest.raises(ValueError, match="image_detail"):
         load_settings()
 
@@ -288,7 +288,7 @@ def test_every_organiser_question_flag_is_settable_from_the_environment(monkeypa
     # an explicit CLI flag beats the environment; None leaves it alone
     assert load_settings(allow_web=True, hedge=None).allow_web is True
     assert load_settings(allow_web=True, hedge=None).hedge is True
-    for name in (*env, "GEOAGENT_MODEL", "GEOAGENT_IMAGE_DETAIL", "API_READ_TIMEOUT_S", "RUNS_DIR", "CACHE_DIR"):
+    for name in (*env, "ASTROLABIO_MODEL", "ASTROLABIO_IMAGE_DETAIL", "API_READ_TIMEOUT_S", "RUNS_DIR", "CACHE_DIR"):
         monkeypatch.setenv(name, "")
     assert load_settings().model_dump(exclude={"google_maps_api_key", "mapillary_token"}) == Settings().model_dump(
         exclude={"google_maps_api_key", "mapillary_token"}

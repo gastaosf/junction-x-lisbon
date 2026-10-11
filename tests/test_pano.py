@@ -10,7 +10,7 @@ import cv2
 import numpy as np
 import pytest
 
-from geoagent.pano import (
+from astrolabio.pano import (
     INITIAL_YAWS,
     MAX_SIDE,
     Panorama,
@@ -18,7 +18,7 @@ from geoagent.pano import (
     output_size,
     ruler_ticks,
 )
-from geoagent.tools import view_crop
+from astrolabio.tools import view_crop
 
 W, H = 2048, 1024
 RED = (0, 0, 255)  # BGR
@@ -356,7 +356,7 @@ async def test_view_crop_rejects_bad_input(tmp_path: Path, args: dict) -> None:
 def test_initial_views_are_lighter_than_crops_at_the_spec_sizes(full_size_pano: Panorama) -> None:
     """The initial set is re-uploaded on every request, so it is encoded more compactly; the
     sizes stay as SPEC 6.2 fixes them and on-demand crops keep full quality for reading text."""
-    from geoagent import pano as pano_module
+    from astrolabio import pano as pano_module
 
     assert pano_module.INITIAL_JPEG_QUALITY < pano_module.JPEG_QUALITY
     initial = full_size_pano.initial_views()

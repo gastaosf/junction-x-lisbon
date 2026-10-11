@@ -1,0 +1,619 @@
+/* Panorama focus and replay (js/screens/focus.js, js/screens/focus/scrubber.js), UI-SPEC 5.6.
+ *
+ * The tile parts (.tile-head, .tile-time, .tile-conf, .tile-hyps, .tile-answer, .tile-flag) and
+ * the controls bring their own styles; this file is the page around them: the navigation row,
+ * the sticky timeline, the grid of viewer, map, hypotheses, answer and stream, and the chart.
+ * The inspector below is styled by focus-inspector.css.
+ *
+ * Layout follows the width of the screen's own box (a container query), so half a window and a
+ * 4K projector both get a layout that fits.
+ *
+ * Colour: tokens only. Replay is marked with --accent, an icon and the word "Replay"; nothing here
+ * uses --penalty. The marks of the timeline differ by shape as well as by colour, and the legend
+ * under the track names each of them. */
+
+.focus {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+  container: focus / inline-size;
+}
+
+/* ------------------------------------------------------------------ navigation */
+
+.focus-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.focus-nav-run {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--fs-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.focus-nav-count {
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+.focus-missing-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ------------------------------------------------------------------ head, flags, time bar */
+
+.focus-top {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+  padding: var(--s-3);
+}
+
+.focus.is-special .focus-top {
+  border-color: var(--special);
+}
+
+/* A waiting question outranks everything else on the frame; the status badge says it in words. */
+.focus[data-status="awaiting_mcq"]:not(.is-replay) .focus-top {
+  border-color: var(--attn);
+  box-shadow: 0 0 0 1px var(--attn);
+}
+
+.focus-flags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-1) var(--s-2);
+  min-width: 0;
+}
+
+.focus-flags[hidden] {
+  display: none;
+}
+
+.focus-flags-label {
+  color: var(--dim);
+  font-weight: 650;
+}
+
+/* The parts that show the moment of the cursor carry the replay colour while it is set. */
+.focus.is-replay .focus-top,
+.focus.is-replay .focus-part-viewer,
+.focus.is-replay .focus-part-map,
+.focus.is-replay .focus-part-hyps,
+.focus.is-replay .focus-part-answer {
+  border-color: var(--accent-line);
+}
+
+/* ------------------------------------------------------------------ timeline */
+
+.focus-scrub-slot {
+  position: sticky;
+  top: var(--shell-h);
+  z-index: var(--z-sticky);
+  min-width: 0;
+}
+
+.focus-scrub {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-3);
+  background: var(--panel);
+  box-shadow: 0 0.5rem 1rem -0.75rem var(--backdrop);
+}
+
+/* Opaque under the tint: the page scrolls beneath a sticky bar. */
+.focus-scrub[data-mode="replay"] {
+  border-color: var(--accent);
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--panel);
+}
+
+.focus-scrub-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-1) var(--s-2);
+  min-height: var(--control-h);
+  min-width: 0;
+  color: var(--dim);
+  font-size: var(--fs-sm);
+}
+
+.focus-scrub-banner-icon {
+  display: inline-flex;
+}
+
+.focus-scrub-banner-text {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
+.focus-scrub[data-mode="replay"] .focus-scrub-banner {
+  color: var(--text-strong);
+  font-size: var(--fs-md);
+  font-weight: 650;
+}
+
+.focus-scrub[data-mode="replay"] .focus-scrub-banner-icon {
+  color: var(--accent);
+}
+
+.focus-scrub[data-mode="live"] .focus-scrub-banner-icon {
+  color: var(--ok);
+}
+
+.focus-scrub-state:not([hidden]) {
+  padding: var(--s-1) 0 var(--s-2);
+  font-size: var(--fs-sm);
+}
+
+.focus-scrub-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--s-1) var(--s-4);
+  min-width: 0;
+}
+
+.focus-scrub-body[hidden],
+.focus-scrub-legend[hidden] {
+  display: none;
+}
+
+.focus-scrub-trackbox {
+  flex: 1 1 26rem;
+  min-width: 0;
+}
+
+/* The side margin is room for the thumb at either end: the box itself is the 0 to 1 of the track. */
+.focus-scrub-track {
+  --scrub-rail-top: 1.3rem;
+  --scrub-rail-h: 0.36rem;
+  position: relative;
+  height: 2.75rem;
+  margin: 0 0.6rem;
+  border-radius: var(--r-1);
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+
+.focus-scrub-track:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.focus-scrub-rail {
+  position: absolute;
+  top: var(--scrub-rail-top);
+  right: 0;
+  left: 0;
+  height: var(--scrub-rail-h);
+  overflow: hidden;
+  border-radius: 99rem;
+  background: var(--panel-3);
+}
+
+.focus-scrub-fill {
+  width: 100%;
+  height: 100%;
+  background: var(--dim);
+}
+
+.focus-scrub[data-mode="replay"] .focus-scrub-fill {
+  background: var(--accent);
+}
+
+.focus-scrub-turns,
+.focus-scrub-marks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.focus-scrub-turn {
+  position: absolute;
+  top: calc(var(--scrub-rail-top) - 0.5rem);
+  width: 1px;
+  height: 0.42rem;
+  background: var(--dim);
+}
+
+.focus-scrub-turn-n {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  padding-bottom: 0.12rem;
+  color: var(--dim);
+  font-size: 0.74rem;
+  line-height: 1;
+  transform: translateX(-50%);
+}
+
+.focus-scrub-mark {
+  position: absolute;
+  top: calc(var(--scrub-rail-top) + var(--scrub-rail-h) + 0.24rem);
+  width: 0.62rem;
+  height: 0.62rem;
+  background: var(--dim);
+  transform: translateX(-50%);
+}
+
+.focus-scrub-mark[data-kind="candidates"] {
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.focus-scrub-mark[data-kind="human"] {
+  background: var(--text-strong);
+  transform: translateX(-50%) rotate(45deg) scale(0.82);
+}
+
+.focus-scrub-mark[data-kind="soft_deadline"] {
+  width: 0.24rem;
+  height: 0.8rem;
+  background: var(--warn);
+}
+
+.focus-scrub-mark[data-kind="final"] {
+  border-radius: 0.08rem;
+  background: var(--final);
+}
+
+.focus-scrub-mark[data-kind="error"] {
+  background: var(--bad);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.focus-scrub-turn.is-later,
+.focus-scrub-mark.is-later {
+  opacity: 0.38;
+}
+
+.focus-scrub-thumb {
+  position: absolute;
+  top: calc(var(--scrub-rail-top) + var(--scrub-rail-h) / 2 - 0.5rem);
+  left: 100%;
+  width: 1rem;
+  height: 1rem;
+  border: 0.16rem solid var(--text-strong);
+  border-radius: 50%;
+  background: var(--panel);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.focus-scrub-thumb::before {
+  position: absolute;
+  top: -0.85rem;
+  bottom: -0.95rem;
+  left: 50%;
+  width: 0.12rem;
+  background: var(--text-strong);
+  content: "";
+  transform: translateX(-50%);
+  z-index: -1;
+}
+
+.focus-scrub[data-mode="replay"] .focus-scrub-thumb {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.focus-scrub[data-mode="replay"] .focus-scrub-thumb::before {
+  background: var(--accent);
+}
+
+.focus-scrub.is-dragging .focus-scrub-track {
+  cursor: grabbing;
+}
+
+.focus-scrub-bubble {
+  position: absolute;
+  bottom: calc(100% - 0.35rem);
+  z-index: 2;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-2);
+  background: var(--panel-3);
+  color: var(--text-strong);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.focus-scrub-bubble[hidden] {
+  display: none;
+}
+
+.focus-scrub-bubble[data-side="left"] {
+  transform: translateX(-92%);
+}
+
+.focus-scrub-bubble[data-side="right"] {
+  transform: translateX(-8%);
+}
+
+.focus-scrub-scale {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s-3);
+  margin: 0.25rem 0.6rem 0;
+}
+
+.focus-scrub-controls {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+  min-width: 0;
+  padding-top: 0.5rem;
+}
+
+.focus-scrub-step {
+  gap: 0.2rem;
+}
+
+/* Wide enough for "1:07:42 · event 1234 of 1234 · turn 60": the buttons must not move as it changes. */
+.focus-scrub-readout {
+  display: flex;
+  flex-direction: column;
+  min-width: 17.5rem;
+  font-size: var(--fs-sm);
+  line-height: 1.25;
+}
+
+.focus-scrub-readout-main {
+  color: var(--text-strong);
+  font-weight: 650;
+}
+
+.focus-scrub-readout-mark {
+  color: var(--dim);
+  font-size: var(--fs-xs);
+}
+
+.focus-scrub-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-4);
+  min-width: 0;
+}
+
+.focus-scrub-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.focus-scrub-turn.is-key {
+  position: static;
+  height: 0.7rem;
+}
+
+.focus-scrub-mark.is-key {
+  position: static;
+  flex: none;
+  transform: none;
+}
+
+.focus-scrub-mark.is-key[data-kind="human"] {
+  transform: rotate(45deg) scale(0.82);
+}
+
+.focus-replay-note[hidden] {
+  display: none;
+}
+
+/* ------------------------------------------------------------------ the grid */
+
+.focus-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+.focus-part {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+  padding: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  background: var(--panel);
+}
+
+.focus-part > .section-title {
+  margin: 0;
+}
+
+.focus-part-viewer {
+  padding: 0;
+  overflow: hidden;
+  background: var(--bg-sunk);
+}
+
+.focus-viewer {
+  height: clamp(15rem, 50cqw, 30rem);
+}
+
+.focus-map {
+  height: clamp(15rem, 44cqw, 26rem);
+  overflow: hidden;
+  border-radius: var(--r-2);
+}
+
+/* Kept in the layout, so the map does not jump while the scrubber moves. */
+.focus-conf-slot.is-pending {
+  visibility: hidden;
+}
+
+.focus-truth-note {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+}
+
+.focus-truth-note[hidden] {
+  display: none;
+}
+
+.focus-part-stream {
+  min-height: 0;
+}
+
+/* The stream fills what its row leaves and never shrinks below a readable list. */
+.focus-stream {
+  display: flex;
+  flex: 1 1 24rem;
+  flex-direction: column;
+  min-height: 24rem;
+}
+
+/* A slot whose content is hidden or absent must not leave a gap of its own. */
+.focus-mcq:not(:has(> :not([hidden]))),
+.focus-controls:empty {
+  display: none;
+}
+
+.focus-controls {
+  min-width: 0;
+  padding: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  background: var(--panel);
+}
+
+@container focus (min-width: 46rem) {
+  .focus-main {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .focus-part-viewer,
+  .focus-part-map,
+  .focus-part-stream,
+  .focus-mcq,
+  .focus-controls {
+    grid-column: 1 / -1;
+  }
+}
+
+/* With room to spare: the panorama beside the map, then hypotheses, answer and stream. */
+@container focus (min-width: 72rem) {
+  .focus-main {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-template-areas:
+      "v v v v v v v m m m m m"
+      "q q q q q q q q q q q q"
+      "h h h h a a a a s s s s"
+      "c c c c c c c c c c c c";
+  }
+
+  .focus-part-viewer {
+    grid-area: v;
+  }
+
+  .focus-viewer {
+    height: clamp(22rem, 33cqw, 50rem);
+  }
+
+  .focus-part-map {
+    grid-area: m;
+  }
+
+  .focus-map {
+    flex: 1 1 16rem;
+    height: auto;
+    min-height: 16rem;
+  }
+
+  .focus-mcq {
+    grid-area: q;
+  }
+
+  .focus-part-hyps {
+    grid-area: h;
+  }
+
+  .focus-part-answer {
+    grid-area: a;
+  }
+
+  .focus-part-stream {
+    grid-area: s;
+  }
+
+  .focus-controls {
+    grid-area: c;
+  }
+
+  .focus-stream {
+    flex-basis: 28rem;
+    min-height: 28rem;
+  }
+}
+
+@container focus (min-width: 120rem) {
+  .focus-main {
+    grid-template-areas:
+      "v v v v v v v m m m m m"
+      "q q q q q q q q q q q q"
+      "h h h h a a a s s s s s"
+      "c c c c c c c c c c c c";
+  }
+}
+
+/* ------------------------------------------------------------------ evolution, inspector */
+
+.focus-evolution {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+  padding: var(--s-3);
+}
+
+.focus-evolution > .section-title,
+.focus-inspector > .section-title {
+  margin: 0;
+}
+
+.focus-chart-note {
+  margin: 0;
+}
+
+.focus-chart {
+  height: 19rem;
+  min-width: 0;
+}
+
+.focus-inspector {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+}

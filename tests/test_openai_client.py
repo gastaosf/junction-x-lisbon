@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 from openai.types.responses import Response
 
-from geoagent.openai_client import flatten_usage, from_response, item_dict, to_input
+from astrolabio.openai_client import flatten_usage, from_response, item_dict, to_input
 
 REASONING = {
     "id": "rs_1",

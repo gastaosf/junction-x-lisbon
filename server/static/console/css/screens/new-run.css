@@ -1,0 +1,751 @@
+/*
+  New run screen (UI-SPEC 5.3). Everything is prefixed `nr-`; buttons, badges, notices, tables,
+  tabs, progress bars, fields and switches come from base.css.
+
+  Layout: a column of numbered step cards (.nr-step). A closed step shows one line that says why
+  and hides its body. The last step is two columns: the settings on the left, the launch panel
+  (summary, readiness, the button) sticky on the right.
+*/
+
+.nr {
+  max-width: 120rem;
+  margin: 0 auto;
+}
+
+.nr-head .page-head {
+  margin-bottom: 0;
+}
+
+.nr-notice-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.nr-notice-actions {
+  margin-top: var(--s-2);
+}
+
+.nr-busy {
+  padding: var(--s-2) 0;
+}
+
+.nr-list {
+  margin: var(--s-1) 0 0;
+  padding-left: 1.2rem;
+}
+
+.nr-list > li + li {
+  margin-top: 0.15rem;
+}
+
+/* ------------------------------------------------------------------ step cards */
+
+.nr-step-head {
+  gap: var(--s-2) var(--s-3);
+}
+
+.nr-num {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border: 1px solid var(--accent-line);
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--text-strong);
+  font-weight: 700;
+}
+
+.nr-step-title {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--fs-lg);
+  font-weight: 650;
+}
+
+.nr-step-status {
+  display: inline-flex;
+}
+
+.nr-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4);
+}
+
+.nr-step-lock {
+  padding: var(--s-3) var(--s-4);
+}
+
+.nr-step.locked {
+  background: var(--bg-sunk);
+}
+
+.nr-step.locked .nr-step-head {
+  border-bottom-color: transparent;
+}
+
+.nr-step.locked .nr-num {
+  border-color: var(--line-strong);
+  background: transparent;
+  color: var(--dim);
+}
+
+.nr-step.locked .nr-step-title {
+  color: var(--dim);
+}
+
+/* ------------------------------------------------------------------ step 1: presets */
+
+.nr-presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--s-3);
+}
+
+.nr-preset {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+  padding: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  background: var(--panel-2);
+  cursor: pointer;
+}
+
+.nr-preset:hover {
+  border-color: var(--line-strong);
+}
+
+/* The radio button stays visible: it is what says "selected" without relying on colour. */
+.nr-preset:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.nr-preset-input:focus-visible {
+  outline: none;
+}
+
+.nr-preset.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.nr-preset-name {
+  font-size: var(--fs-lg);
+}
+
+.nr-preset-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.15rem var(--s-3);
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+
+.nr-preset-facts > dt {
+  color: var(--dim);
+}
+
+.nr-preset-facts > dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------------ step 2: panoramas */
+
+.nr-selected-line {
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--ok-line);
+  border-radius: var(--r-2);
+  background: var(--ok-soft);
+}
+
+.nr-source-panel {
+  min-width: 0;
+  padding-top: var(--s-1);
+}
+
+.nr-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-6) var(--s-4);
+  border: 2px dashed var(--line-strong);
+  border-radius: var(--r-3);
+  background: var(--bg-sunk);
+  color: var(--dim);
+  text-align: center;
+}
+
+.nr-drop.over {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.nr-drop.compact {
+  padding: var(--s-3) var(--s-4);
+}
+
+.nr-drop.compact > .icon,
+.nr-drop.compact > .small {
+  display: none;
+}
+
+.nr-drop.compact .nr-drop-title {
+  font-size: var(--fs-lg);
+}
+
+.nr-drop-title {
+  color: var(--text-strong);
+  font-size: var(--fs-xl);
+  font-weight: 650;
+}
+
+.nr-drop > .small {
+  max-width: 46rem;
+}
+
+.nr-drop-actions {
+  justify-content: center;
+  margin-top: var(--s-2);
+}
+
+.nr-overall {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.nr-overall > .progress {
+  height: 0.6rem;
+}
+
+.nr-uploads {
+  display: flex;
+  flex-direction: column;
+  max-height: 22rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  list-style: none;
+}
+
+.nr-uploads:empty {
+  display: none;
+}
+
+.nr-upload-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 6rem minmax(6rem, 14rem) 8.5rem;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-2) var(--s-3);
+}
+
+.nr-upload-row + .nr-upload-row {
+  border-top: 1px solid var(--line);
+}
+
+.nr-upload-name {
+  min-width: 0;
+}
+
+.nr-upload-size {
+  text-align: right;
+}
+
+.nr-upload-state {
+  display: inline-flex;
+  justify-content: flex-end;
+}
+
+.nr-fs-form > .field-label {
+  flex: none;
+}
+
+.nr-fs-bar {
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--panel-2);
+}
+
+.nr-fs-table {
+  max-height: 26rem;
+  overflow-y: auto;
+}
+
+button.nr-fs-entry,
+.nr-fs-entry {
+  justify-content: flex-start;
+  max-width: 100%;
+  text-align: left;
+}
+
+.nr-set-actions {
+  justify-content: flex-end;
+}
+
+.nr-set-detail > td {
+  background: var(--bg-sunk);
+}
+
+/* ------------------------------------------------------------------ step 3: preflight */
+
+.nr-preflight.stale,
+.nr-eval.stale {
+  opacity: 0.65;
+}
+
+.nr-preflight-summary {
+  font-size: var(--fs-lg);
+}
+
+.nr-warnings {
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.nr-bulk {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  border: 1px solid var(--warn-line);
+  border-radius: var(--r-2);
+}
+
+.nr-table td {
+  vertical-align: top;
+}
+
+.nr-table th {
+  white-space: nowrap;
+}
+
+.nr-thumb {
+  width: 10.5rem;
+}
+
+.nr-thumb-btn {
+  position: relative;
+  display: block;
+  width: 9.6rem;
+  height: 4.8rem;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--r-2);
+  background: var(--bg-sunk);
+}
+
+.nr-thumb-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.nr-thumb-img.broken {
+  visibility: hidden;
+}
+
+.nr-thumb-zoom {
+  position: absolute;
+  right: 0.25rem;
+  bottom: 0.25rem;
+  display: inline-flex;
+  padding: 0.2rem;
+  border-radius: var(--r-1);
+  background: var(--panel);
+  color: var(--text);
+  opacity: 0;
+}
+
+.nr-thumb-btn:hover .nr-thumb-zoom,
+.nr-thumb-btn:focus-visible .nr-thumb-zoom {
+  opacity: 1;
+}
+
+.nr-identity {
+  min-width: 11rem;
+  max-width: 20rem;
+}
+
+.nr-label {
+  min-width: 11rem;
+}
+
+.nr-label > * + *,
+.nr-stamp > * + *,
+.nr-special > * + * {
+  margin-top: var(--s-1);
+}
+
+.nr-stamp {
+  min-width: 12rem;
+}
+
+.nr-stamp-input {
+  width: 14.5rem;
+  max-width: 100%;
+  min-height: 1.9rem;
+  padding: 0.1rem 0.35rem;
+  font-size: var(--fs-sm);
+}
+
+.nr-special {
+  white-space: nowrap;
+}
+
+.nr-budget {
+  min-width: 11.5rem;
+  white-space: nowrap;
+}
+
+.nr-notes {
+  min-width: 6rem;
+  max-width: 16rem;
+}
+
+.nr-row-special > td {
+  background: color-mix(in srgb, var(--special-bg) 9%, transparent);
+}
+
+.nr-row-blocked > td:first-child {
+  box-shadow: inset 3px 0 0 var(--bad);
+}
+
+.nr-row-skipped > td {
+  opacity: 0.6;
+}
+
+.nr-special-none {
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--panel-2);
+}
+
+.nr-ignored > summary,
+.nr-advanced > summary,
+.nr-prompt > summary {
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.nr-ignored > summary {
+  color: var(--dim);
+}
+
+/* The full-screen look at one panorama: the viewer brings its own dark chrome. */
+dialog.nr-viewer {
+  display: none;
+  flex-direction: column;
+  width: 96vw;
+  max-width: 96vw;
+  height: 92vh;
+  max-height: 92vh;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-3);
+  background: var(--panel);
+}
+
+dialog.nr-viewer[open] {
+  display: flex;
+}
+
+.nr-viewer-head {
+  flex: none;
+  flex-wrap: wrap;
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.nr-viewer-file,
+.nr-viewer-hint {
+  color: var(--dim);
+}
+
+.nr-viewer-stage {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ------------------------------------------------------------------ evaluation step */
+
+.nr-limit {
+  max-width: 34rem;
+}
+
+.nr-limit-input {
+  width: 9rem;
+}
+
+.nr-eval-summary {
+  font-size: var(--fs-lg);
+}
+
+/* ------------------------------------------------------------------ step 4: settings */
+
+.nr-final {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(23rem, 30rem);
+  align-items: start;
+  gap: var(--s-5);
+}
+
+.nr-final-add {
+  grid-template-columns: minmax(0, 44rem);
+}
+
+.nr-options {
+  min-width: 0;
+}
+
+.nr-summary-line {
+  font-size: var(--fs-lg);
+  line-height: 1.6;
+}
+
+.nr-advanced,
+.nr-prompt {
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--panel-2);
+}
+
+.nr-advanced > summary,
+.nr-prompt > summary {
+  padding: var(--s-2) var(--s-3);
+}
+
+.nr-advanced[open] > summary,
+.nr-prompt[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+
+.nr-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: var(--s-3);
+  padding: var(--s-3);
+}
+
+.nr-groups > .notice {
+  grid-column: 1 / -1;
+}
+
+.nr-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+  margin: 0;
+  padding: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--panel);
+}
+
+.nr-group > legend {
+  padding: 0 var(--s-2);
+}
+
+.nr-group-wide {
+  grid-column: 1 / -1;
+}
+
+.nr-field > input:not([type="checkbox"]),
+.nr-field > select {
+  width: 100%;
+  max-width: 24rem;
+}
+
+.nr-lock {
+  color: var(--dim);
+}
+
+.nr-switch-text {
+  font-weight: 550;
+}
+
+.nr-budgets th[scope="row"] {
+  white-space: nowrap;
+}
+
+.nr-budgets th[scope="row"] > div {
+  font-weight: 400;
+}
+
+.nr-budgets td > input,
+.nr-budgets td > select {
+  width: 100%;
+  min-width: 6.5rem;
+}
+
+.nr-tools {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: var(--s-2) var(--s-4);
+}
+
+.nr-tool {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.nr-tool > .field-help,
+.nr-tool > .field-error {
+  flex-basis: 100%;
+}
+
+.nr-prompt-body {
+  padding: var(--s-3);
+}
+
+.nr-prompt-text {
+  max-height: 32rem;
+  margin: 0;
+}
+
+.nr-prompt-tools {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+  gap: var(--s-2) var(--s-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nr-prompt-tools .small {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+/* ------------------------------------------------------------------ step 4: launch panel */
+
+.nr-launch {
+  position: sticky;
+  top: calc(var(--shell-h) + var(--s-3));
+  /* Never taller than the window: the summary scrolls, the button below it stays in view. */
+  max-height: calc(100vh - var(--shell-h) - 2 * var(--s-3));
+  gap: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-3);
+  background: var(--panel-2);
+}
+
+.nr-launch-info {
+  flex: 1;
+  min-height: 0;
+  padding: var(--s-4);
+  overflow-y: auto;
+}
+
+.nr-final-add > .nr-launch {
+  position: static;
+  max-height: none;
+}
+
+.nr-launch .section-title {
+  margin: 0;
+}
+
+.nr-kv {
+  gap: var(--s-2) var(--s-4);
+}
+
+.nr-tool-chip {
+  margin: 0 0.25rem 0.25rem 0;
+  font-size: var(--fs-xs);
+}
+
+.nr-ready {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nr-ready-item {
+  display: grid;
+  grid-template-columns: 7.2rem minmax(0, 1fr);
+  align-items: start;
+  gap: var(--s-2);
+}
+
+.nr-ready-item > .badge {
+  justify-self: start;
+}
+
+.nr-ready-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.nr-go {
+  flex: none;
+  padding: var(--s-3) var(--s-4) var(--s-4);
+  border-top: 1px solid var(--line-strong);
+}
+
+.nr-go-btn {
+  width: 100%;
+  min-height: 3.1rem;
+  height: auto;
+  padding: 0.55rem 0.8rem;
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.nr-go > .notice {
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.nr-blockers {
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--warn-line);
+  border-radius: var(--r-2);
+  background: var(--warn-soft);
+}
+
+.nr-confirm .kv {
+  gap: var(--s-2) var(--s-4);
+}
+
+/* ------------------------------------------------------------------ narrow windows */
+
+@media (max-width: 1500px) {
+  .nr-final {
+    grid-template-columns: minmax(0, 1fr) minmax(21rem, 25rem);
+    gap: var(--s-4);
+  }
+}

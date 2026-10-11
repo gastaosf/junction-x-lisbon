@@ -1,0 +1,330 @@
+/*
+  Runs screen (UI-SPEC 5.2). Everything is prefixed `runs-`; the table, buttons, badges, notices
+  and the empty state come from base.css.
+*/
+
+.runs-summary {
+  font-size: var(--fs-sm);
+}
+
+.runs-updated {
+  white-space: nowrap;
+}
+
+.runs-refresh-mark {
+  display: inline-flex;
+}
+
+/* ------------------------------------------------------------------ filters */
+
+.runs-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-4);
+  margin-bottom: var(--s-3);
+}
+
+.runs-search {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.runs-search > .icon {
+  position: absolute;
+  left: 0.55rem;
+  color: var(--dim);
+  pointer-events: none;
+}
+
+.runs-search-input {
+  width: 15rem;
+  padding-left: 1.9rem;
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+}
+
+.runs-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.runs-count {
+  color: var(--dim);
+  font-size: var(--fs-xs);
+  font-weight: 400;
+}
+
+.runs-filter button[aria-pressed="true"] .runs-count {
+  color: inherit;
+}
+
+.runs-status:not(:empty) {
+  margin-bottom: var(--s-3);
+}
+
+.runs-status .notice {
+  align-items: center;
+}
+
+/* ------------------------------------------------------------------ table */
+
+/* From the smallest supported width up the table fits, so nothing needs to scroll sideways and
+   the header can stick under the shell (a scrolling wrapper would capture it). */
+@media (min-width: 1240px) {
+  .runs-table-wrap {
+    overflow: visible;
+  }
+
+  .runs-table thead th:first-child {
+    border-top-left-radius: var(--r-3);
+  }
+
+  .runs-table thead th:last-child {
+    border-top-right-radius: var(--r-3);
+  }
+}
+
+.runs-table th,
+.runs-table td {
+  padding-right: 0.5rem;
+  padding-left: 0.5rem;
+}
+
+.runs-table th:first-child,
+.runs-table td:first-child {
+  padding-left: 0.85rem;
+}
+
+.runs-table th:last-child,
+.runs-table td:last-child {
+  padding-right: 0.85rem;
+}
+
+/* The header label is a real button for the keyboard, but it must read as a table heading. */
+.runs-table th .runs-sort,
+.runs-table th .runs-sort:active:not(:disabled) {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-1);
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+
+/* base.css separates rows inside one tbody; here every run is its own tbody. */
+.runs-table tbody.runs-body > tr:first-child > td {
+  border-top: 1px solid var(--line);
+}
+
+.runs-table thead + tbody.runs-body > tr:first-child > td {
+  border-top: 0;
+}
+
+.runs-table tbody.runs-body:hover > tr > td {
+  background: var(--panel-2);
+}
+
+.runs-table tbody.runs-body:last-child > tr:last-child > td:first-child {
+  border-bottom-left-radius: var(--r-3);
+}
+
+.runs-table tbody.runs-body:last-child > tr:last-child > td:last-child {
+  border-bottom-right-radius: var(--r-3);
+}
+
+/* A marker on the left edge; the state badge beside it carries the meaning in words. */
+.runs-row.runs-active > td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.runs-row[data-state="interrupted"] > td:first-child {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+
+.runs-row[data-state="invalid"] > td:first-child {
+  box-shadow: inset 3px 0 0 var(--bad);
+}
+
+/* Only the column headings stick; a group heading scrolls away with its rows. */
+.runs-table .runs-sep th {
+  position: static;
+  padding-top: 0.3rem;
+  padding-bottom: 0.3rem;
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+  background: var(--panel-2);
+  color: var(--dim);
+}
+
+.runs-table thead + .runs-sep th {
+  border-top: 0;
+}
+
+/* Every column but the first shrinks to what it holds; the run id and its line take the rest. */
+.runs-c-run {
+  min-width: 13rem;
+}
+
+.runs-id {
+  overflow-wrap: anywhere;
+}
+
+.runs-c-mode,
+.runs-c-panoramas,
+.runs-c-spend,
+.runs-c-multiplier,
+.runs-c-time,
+.runs-c-score,
+.runs-c-created {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.runs-c-state {
+  width: 1%;
+  min-width: 8.5rem;
+}
+
+.runs-detail {
+  margin-top: 0.15rem;
+}
+
+.runs-penalties {
+  min-width: 7.5rem;
+  white-space: normal;
+}
+
+.runs-count-line {
+  justify-content: flex-end;
+}
+
+.runs-special {
+  display: inline-flex;
+  color: var(--special);
+}
+
+.runs-progress {
+  width: 4rem;
+  height: 0.3rem;
+  margin: 0.25rem 0 0 auto;
+}
+
+/* ------------------------------------------------------------------ actions */
+
+.runs-c-actions {
+  width: 1%;
+}
+
+.runs-actions {
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+
+/* Icon only on a laptop (the title and the accessible name say what it does); with room to spare
+   the words are shown as well. */
+.runs-actions .runs-act {
+  width: 1.9rem;
+  min-width: 1.9rem;
+  padding: 0;
+}
+
+.runs-act-label {
+  display: none;
+}
+
+/* Delete sits on every row, so it only turns red when it is about to be used. */
+.runs-actions .runs-act-danger:hover,
+.runs-actions .runs-act-danger:focus-visible {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.runs-act .spinner {
+  width: 0.9em;
+  height: 0.9em;
+}
+
+/* Seven labelled buttons need about 42rem: below this width they would squeeze the run id. */
+@media (min-width: 1800px) {
+  .runs-actions .runs-act {
+    width: auto;
+    padding: 0.1rem 0.5rem;
+  }
+
+  .runs-act-label {
+    display: inline;
+  }
+
+  .runs-detail {
+    white-space: nowrap;
+  }
+}
+
+/* Still focusable, so that pressing it can say why it is not available. */
+.runs-actions .runs-act[aria-disabled="true"],
+.runs-actions .runs-act[aria-disabled="true"]:hover {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--dim);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ------------------------------------------------------------------ the explanation under a row */
+
+.runs-note-row > td {
+  padding-top: 0;
+  padding-bottom: 0.55rem;
+  border-top: 0;
+}
+
+.runs-table .runs-note-row > td:first-child {
+  padding-left: 0.85rem;
+}
+
+.runs-note {
+  align-items: center;
+  font-size: var(--fs-sm);
+}
+
+.runs-note + .runs-note {
+  margin-top: var(--s-2);
+}
+
+.runs-note > .icon {
+  align-self: flex-start;
+}
+
+.runs-problems {
+  margin: 0.2rem 0 0;
+  padding-left: 1.1rem;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+}
+
+/* ------------------------------------------------------------------ empty state, footer */
+
+.runs-welcome-text {
+  max-width: 46rem;
+  color: var(--text);
+  text-align: left;
+}
+
+p.small.runs-welcome-text {
+  color: var(--dim);
+  text-align: center;
+}
+
+.runs-welcome-actions {
+  justify-content: center;
+}
+
+.runs-legacy {
+  margin-top: var(--s-4);
+}

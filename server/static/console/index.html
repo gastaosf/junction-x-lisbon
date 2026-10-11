@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<meta name="referrer" content="no-referrer">
+<title>astrolabio</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='11' fill='%230d1117'/%3E%3Ccircle cx='12' cy='12' r='6.5' fill='none' stroke='%2358a6ff' stroke-width='2.5'/%3E%3Ccircle cx='12' cy='12' r='2' fill='%23f2c744'/%3E%3C/svg%3E">
+
+<!-- Everything below is served by the app itself: no CDN, no web font. Map tiles are the only
+     thing this page ever fetches from the internet. -->
+<!-- First, and not deferred: the stored theme is set before anything is painted. -->
+<script src="/static/console/js/theme-boot.js"></script>
+<link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="/static/console/css/base.css">
+<link rel="stylesheet" href="/static/console/css/shell.css">
+<link rel="stylesheet" href="/static/console/css/components/pano-viewer.css">
+<link rel="stylesheet" href="/static/console/css/components/map.css">
+<link rel="stylesheet" href="/static/console/css/components/charts.css">
+<link rel="stylesheet" href="/static/console/css/components/stream.css">
+<link rel="stylesheet" href="/static/console/css/components/tile.css">
+<link rel="stylesheet" href="/static/console/css/components/controls.css">
+<link rel="stylesheet" href="/static/console/css/screens/runs.css">
+<link rel="stylesheet" href="/static/console/css/screens/new-run.css">
+<link rel="stylesheet" href="/static/console/css/screens/dashboard.css">
+<link rel="stylesheet" href="/static/console/css/screens/focus.css">
+<link rel="stylesheet" href="/static/console/css/screens/focus-inspector.css">
+<link rel="stylesheet" href="/static/console/css/screens/stage.css">
+<link rel="stylesheet" href="/static/console/css/screens/submission.css">
+<link rel="stylesheet" href="/static/console/css/screens/eval.css">
+<link rel="stylesheet" href="/static/console/css/screens/eval-results.css">
+<link rel="stylesheet" href="/static/console/css/screens/settings.css">
+
+<!-- Leaflet is a classic script (map.js uses window.L); deferred scripts and modules run in
+     document order, so it is ready before main.js. The server's CSP forbids inline scripts. -->
+<script defer src="/static/vendor/leaflet/leaflet.js"></script>
+<script type="module" src="/static/console/js/main.js"></script>
+</head>
+<body>
+<div id="app">
+  <p class="boot-note">Loading the astrolabio console…</p>
+</div>
+<noscript>
+  <p class="boot-note">The astrolabio console needs JavaScript. The command line (<code>uv run python cli.py</code>) works without it.</p>
+</noscript>
+</body>
+</html>

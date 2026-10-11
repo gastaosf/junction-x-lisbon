@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from geoagent import prompts
-from geoagent.config import Settings
-from geoagent.schema import Label, PanoramaTask
-from geoagent.tools.schemas import tool_definitions
+from astrolabio import prompts
+from astrolabio.config import Settings
+from astrolabio.schema import Label, PanoramaTask
+from astrolabio.tools.schemas import tool_definitions
 
 
 @dataclass

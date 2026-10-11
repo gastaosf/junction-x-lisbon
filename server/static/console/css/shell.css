@@ -1,0 +1,630 @@
+/*
+  The persistent shell (UI-SPEC 5.1): top bar, active-run strip, banners, attention inbox, and the
+  overlays the shell owns (side panel, lightbox, shortcut list). Built by js/components/shell.js.
+
+  Layout contract for screens:
+    #app.app > .shell-top (sticky) + main.outlet > .screen.screen-<route name>
+    .screen has the page padding; a route declared with `shell: false` (the stage view) gets
+    .app.no-shell: no shell, no padding, --shell-h is 0.
+*/
+
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.shell-top {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-shell);
+}
+
+.outlet {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.screen {
+  padding: var(--s-4) var(--s-5) var(--s-8);
+}
+
+.app.no-shell .shell-top {
+  display: none;
+}
+
+.app.no-shell .screen {
+  padding: 0;
+}
+
+.screen-loading {
+  padding: var(--s-6) 0;
+}
+
+.screen-error {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  max-width: 48rem;
+  margin: var(--s-6) auto;
+}
+
+.screen-error .card-title {
+  margin: 0;
+}
+
+.screen-error .card-title .icon {
+  color: var(--warn);
+}
+
+.error-text {
+  max-height: 16rem;
+  padding: var(--s-3);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--bg-sunk);
+  color: var(--bad);
+  font-size: var(--fs-sm);
+}
+
+.error-text.dim {
+  color: var(--dim);
+}
+
+/* ------------------------------------------------------------------ top bar */
+
+.shell-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-height: 3.4rem;
+  padding: 0 var(--s-4);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-sunk);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-right: var(--s-2);
+  color: var(--text-strong);
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.brand:hover {
+  text-decoration: none;
+}
+
+.brand .icon {
+  width: 1.3em;
+  height: 1.3em;
+  color: var(--accent);
+}
+
+.shell-nav {
+  display: flex;
+  align-self: stretch;
+  gap: 0.15rem;
+}
+
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.85rem;
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+  color: var(--dim);
+  font-weight: 550;
+  white-space: nowrap;
+}
+
+.nav-link:hover {
+  background: var(--panel);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.nav-link.active {
+  border-bottom-color: var(--accent);
+  color: var(--text-strong);
+  font-weight: 650;
+}
+
+.nav-link:focus-visible {
+  outline-offset: -2px;
+}
+
+.shell-tools {
+  display: flex;
+  gap: 0.1rem;
+}
+
+.shell-toggle[aria-pressed="true"] {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text);
+}
+
+.shell-toggle[aria-pressed="false"] {
+  color: var(--dim);
+  opacity: 0.75;
+}
+
+/* ------------------------------------------------------------------ health chips, connection */
+
+.health-chips {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.health-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 1.7rem;
+  padding: 0.1rem 0.6rem 0.1rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--dim);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.health-chip:hover {
+  border-color: var(--accent);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.health-chip .icon {
+  width: 1em;
+  height: 1em;
+  stroke-width: 2.8;
+}
+
+.health-chip.is-ok .icon {
+  color: var(--ok);
+}
+
+.health-chip.is-bad {
+  border-color: var(--bad-line);
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+
+.health-word {
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* At laptop width the chips keep their name and icon; the state word moves to the tooltip. */
+@media (max-width: 1340px) {
+  .health-word {
+    display: none;
+  }
+
+  .shell-bar {
+    gap: var(--s-2);
+  }
+}
+
+.conn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 1.7rem;
+  padding-left: var(--s-3);
+  border-left: 1px solid var(--line);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.conn-up {
+  color: var(--ok);
+}
+
+.conn-down {
+  color: var(--bad);
+}
+
+.conn-connecting {
+  color: var(--dim);
+}
+
+/* ------------------------------------------------------------------ attention inbox */
+
+.inbox {
+  position: relative;
+}
+
+.inbox-btn.has-items {
+  border-color: var(--accent-line);
+  color: var(--text-strong);
+}
+
+.inbox-count {
+  min-width: 1.45rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  line-height: 1.55;
+  text-align: center;
+}
+
+/* A question is waiting: amber, and a slow pulse that is still calm on a projector. */
+.inbox-btn.urgent {
+  border-color: var(--attn);
+  animation: inbox-pulse 1.8s ease-in-out infinite;
+}
+
+.inbox-btn.urgent .inbox-count {
+  background: var(--attn);
+  color: var(--attn-ink);
+}
+
+/* "MCQ 0:47" beside the count while a question waits. */
+.inbox-mcq-left {
+  color: var(--warn);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+@keyframes inbox-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  50% {
+    box-shadow: 0 0 0 0.25rem var(--warn-soft);
+  }
+}
+
+.inbox-panel {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  right: 0;
+  z-index: var(--z-pop);
+  width: min(32rem, 92vw);
+  max-height: min(72vh, 36rem);
+  padding: 0.35rem;
+  overflow: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-3);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.inbox-head {
+  padding: 0.4rem 0.6rem 0.5rem;
+}
+
+.inbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inbox-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.65rem;
+  padding: 0.5rem 0.65rem;
+  border-left: 3px solid var(--line-strong);
+  border-radius: var(--r-1) var(--r-2) var(--r-2) var(--r-1);
+  color: var(--text);
+}
+
+.inbox-item:hover {
+  background: var(--panel-2);
+  text-decoration: none;
+}
+
+.inbox-item:focus-visible {
+  outline-offset: -2px;
+}
+
+.inbox-item > .icon {
+  margin-top: 0.15rem;
+  color: var(--dim);
+}
+
+.inbox-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.inbox-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.5rem;
+}
+
+.inbox-title {
+  font-weight: 650;
+}
+
+.inbox-where {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+
+.inbox-detail {
+  font-size: var(--fs-sm);
+}
+
+.inbox-time {
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.inbox-mcq {
+  border-left-color: var(--attn);
+  background: var(--warn-soft);
+}
+
+.inbox-mcq > .icon,
+.inbox-mcq .inbox-time,
+.inbox-window > .icon,
+.inbox-window .inbox-time,
+.inbox-spend > .icon,
+.inbox-no_hypothesis > .icon {
+  color: var(--warn);
+}
+
+.inbox-window,
+.inbox-spend,
+.inbox-no_hypothesis {
+  border-left-color: var(--warn);
+}
+
+.inbox-api,
+.inbox-export,
+.inbox-fallback {
+  border-left-color: var(--bad);
+}
+
+.inbox-api > .icon,
+.inbox-export > .icon,
+.inbox-fallback > .icon {
+  color: var(--bad);
+}
+
+.inbox-empty {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-4) var(--s-3);
+}
+
+.inbox-empty .icon {
+  color: var(--ok);
+}
+
+/* ------------------------------------------------------------------ active-run strip */
+
+.run-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: 0.3rem var(--s-4);
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.run-strip-list {
+  display: flex;
+  gap: var(--s-2);
+}
+
+.run-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.8rem;
+  min-height: 1.9rem;
+  padding: 0.15rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+.run-chip:hover {
+  border-color: var(--accent);
+  text-decoration: none;
+}
+
+.run-chip-id {
+  max-width: 18rem;
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+}
+
+.run-chip-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.run-chip-item .icon {
+  color: var(--dim);
+}
+
+.run-chip-mult {
+  color: var(--ok);
+  font-family: var(--mono);
+  font-weight: 700;
+}
+
+.run-chip-mult.cut {
+  color: var(--warn);
+}
+
+/* ------------------------------------------------------------------ banners */
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem var(--s-4);
+  font-size: var(--fs-sm);
+}
+
+.banner > .icon {
+  width: 1.25em;
+  height: 1.25em;
+}
+
+.banner strong {
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* Permanent while the scripted demo model is active: it must be impossible to overlook. */
+.banner-fake {
+  background: var(--attn);
+  color: var(--attn-ink);
+}
+
+.banner-offline {
+  background: var(--bad-solid);
+  color: var(--bad-solid-ink);
+}
+
+/* ------------------------------------------------------------------ side panel */
+
+.side-panel {
+  position: fixed;
+  top: var(--shell-h);
+  right: 0;
+  bottom: 0;
+  z-index: var(--z-panel);
+  display: flex;
+  flex-direction: column;
+  width: min(36rem, 92vw);
+  border-left: 1px solid var(--line-strong);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.side-panel.wide {
+  width: min(60rem, 92vw);
+}
+
+.side-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: 0.5rem 0.5rem 0.5rem var(--s-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.side-panel-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.side-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--s-4);
+  overflow: auto;
+}
+
+/* ------------------------------------------------------------------ lightbox */
+
+.lightbox {
+  max-width: 96vw;
+  max-height: 96vh;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+}
+
+.lightbox::backdrop {
+  background: rgba(0, 0, 0, 0.86);
+}
+
+.lightbox-image {
+  display: block;
+  max-width: 96vw;
+  max-height: 86vh;
+  margin: 0 auto;
+  border-radius: var(--r-2);
+  background: #000;
+}
+
+.lightbox-caption {
+  margin-top: var(--s-2);
+  color: #e6ebf0;
+  font-size: var(--fs-sm);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.lightbox-close {
+  position: fixed;
+  top: var(--s-4);
+  right: var(--s-4);
+  background: rgba(0, 0, 0, 0.55);
+  color: #ffffff;
+}
+
+.lightbox-close:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.8);
+  color: #ffffff;
+}
+
+/* ------------------------------------------------------------------ shortcut list */
+
+.dialog-shortcuts {
+  width: min(92vw, 46rem);
+}
+
+.shortcut-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: var(--s-5);
+  max-height: 60vh;
+}
+
+.shortcut-groups section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.shortcut-list > dt {
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.dialog-shortcuts > p {
+  margin-top: var(--s-4);
+}

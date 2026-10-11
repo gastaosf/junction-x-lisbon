@@ -8,10 +8,10 @@ from typing import Any
 import httpx
 import pytest
 
-from geoagent.config import Settings
-from geoagent.tools import registry
-from geoagent.tools.base import ToolContext, ToolResult
-from geoagent.tools.schemas import HUMAN_TOOLS, LOCAL_TOOLS, WEB_CLIENT_TOOLS
+from astrolabio.config import Settings
+from astrolabio.tools import registry
+from astrolabio.tools.base import ToolContext, ToolResult
+from astrolabio.tools.schemas import HUMAN_TOOLS, LOCAL_TOOLS, WEB_CLIENT_TOOLS
 
 
 class FakeLog:

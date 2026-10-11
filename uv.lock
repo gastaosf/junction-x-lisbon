@@ -236,7 +236,7 @@ wheels = [
 ]
 
 [[package]]
-name = "geoagent"
+name = "astrolabio"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

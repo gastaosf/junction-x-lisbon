@@ -1,5 +1,5 @@
 [project]
-name = "geoagent"
+name = "astrolabio"
 version = "0.1.0"
 description = "Panorama localisation agent (Albatroz Challenge, JunctionX Lisbon 2026)"
 requires-python = ">=3.11"
